@@ -32,15 +32,36 @@ def __version__():
 def rle_bufsize(input_size):
     return cpolycomp.pcomp_rle_bufsize(input_size)
 
-def rle_compress_int8(np.ndarray[np.int8_t, ndim=1] values):
-    cdef size_t real_size
+def rle_compress(np.ndarray values not None):
     cdef int result
-    cdef np.ndarray[np.int8_t, ndim=1] output = np.empty(rle_bufsize(values.size),
+    cdef size_t num_of_bytes = values.dtype.itemsize * rle_bufsize(values.size)
+    cdef size_t real_size = num_of_bytes
+    cdef np.ndarray[np.int8_t, ndim=1] output = np.empty(num_of_bytes,
                                                          dtype='int8')
 
-    result = cpolycomp.pcomp_compress_rle_int8(<np.int8_t *> output.data, &real_size,
-                                               <np.int8_t *> values.data, values.size)
-    return np.resize(output, real_size)
+    if values.dtype in (np.int8, np.uint8):
+        result = cpolycomp.pcomp_compress_rle_int8(<np.int8_t *> &output.data[0],
+                                                   &real_size,
+                                                   <np.int8_t *> &values.data[0],
+                                                   values.size)
+    elif values.dtype in (np.int16, np.uint16):
+        result = cpolycomp.pcomp_compress_rle_int16(<np.int16_t *> &output.data[0],
+                                                   &real_size,
+                                                   <np.int16_t *> &values.data[0],
+                                                   values.size)
+    elif values.dtype in (np.int32, np.uint32):
+        result = cpolycomp.pcomp_compress_rle_int32(<np.int32_t *> &output.data[0],
+                                                   &real_size,
+                                                   <np.int32_t *> &values.data[0],
+                                                   values.size)
+    elif values.dtype in (np.int64, np.uint64):
+        result = cpolycomp.pcomp_compress_rle_int64(<np.int64_t *> &output.data[0],
+                                                   &real_size,
+                                                   <np.int64_t *> &values.data[0],
+                                                   values.size)
+
+    output = np.resize(output, real_size * values.dtype.itemsize)
+    return np.fromstring(output.tobytes(), values.dtype)
 
 ################################################################################
 # Quantization
