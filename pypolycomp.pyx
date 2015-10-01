@@ -236,29 +236,29 @@ cdef class QuantParams:
         return np.resize(output, real_size)
 
     def decompress(self, np.ndarray input_values not None,
-                   num_of_elements,
+                   num_of_samples,
                    output_dtype=np.float64):
         """Decompress a stream of quantized values.
 
         The number of values to decompress must be specified in the
-        "num_of_elements" parameter, as it cannot be deduced reliably
+        "num_of_samples" parameter, as it cannot be deduced reliably
         by "input_values".
         """
-        
+
         cdef size_t itemsize = self.element_size()
         cdef size_t num_of_bits = len(input_values) * 8
         cdef size_t num_of_bytes = (len(input_values) * 8) / self.bits_per_sample() + 1
-        cdef np.ndarray output = np.empty(num_of_elements, dtype=output_dtype)
+        cdef np.ndarray output = np.empty(num_of_samples, dtype=output_dtype)
 
         if output_dtype == np.float32:
             cpolycomp.pcomp_decompress_quant_float(<np.float32_t *> &output.data[0],
-                                                   num_of_elements,
+                                                   num_of_samples,
                                                    <np.int8_t *> &input_values.data[0],
                                                    len(input_values),
                                                    self._c_params)
         elif output_dtype == np.float64:
             cpolycomp.pcomp_decompress_quant_double(<np.float64_t *> &output.data[0],
-                                                    num_of_elements,
+                                                    num_of_samples,
                                                     <np.int8_t *> &input_values.data[0],
                                                     len(input_values),
                                                     self._c_params)
@@ -267,3 +267,188 @@ cdef class QuantParams:
 quantized data decompression".format(itemsize))
 
         return output
+
+################################################################################
+# Polynomial fit
+
+cdef class PolyFit:
+    cdef cpolycomp.pcomp_poly_fit_data_t* _c_fit
+
+    def __cinit__(self, num_of_samples, num_of_coeffs):
+        self._c_fit = cpolycomp.pcomp_init_poly_fit(num_of_samples, num_of_coeffs)
+
+    def __dealloc__(self):
+        cpolycomp.pcomp_free_poly_fit(self._c_fit)
+
+    def num_of_samples(self):
+        return cpolycomp.pcomp_poly_fit_num_of_samples(self._c_fit)
+
+    def num_of_coeffs(self):
+        return cpolycomp.pcomp_poly_fit_num_of_coeffs(self._c_fit)
+
+    def run(self, np.ndarray[np.float64_t, ndim=1] samples not None):
+        cdef np.ndarray[np.float64_t, ndim=1] coeffs = np.empty(self.num_of_coeffs(),
+                                                                dtype='float64')
+        cdef int result
+        result = cpolycomp.pcomp_run_poly_fit(self._c_fit,
+                                              <np.float64_t *> &coeffs.data[0],
+                                              <np.float64_t *> &samples.data[0])
+
+        if result != PCOMP_STAT_SUCCESS:
+            raise ValueError("pcomp_run_poly_fit returned code {0}"
+                             .format(result))
+
+        return coeffs
+
+################################################################################
+# Chebyshev decomposition
+
+cdef class Chebyshev:
+    cdef cpolycomp.pcomp_chebyshev_t* _c_cheb
+
+    def __cinit__(self, num_of_samples, direction):
+        self._c_cheb = cpolycomp.pcomp_init_chebyshev(num_of_samples, direction)
+
+    def __dealloc__(self):
+        cpolycomp.pcomp_free_chebyshev(self._c_cheb)
+
+    def num_of_samples(self):
+        return cpolycomp.pcomp_chebyshev_num_of_samples(self._c_cheb)
+
+    def direction(self):
+        return cpolycomp.pcomp_chebyshev_direction(self._c_cheb)
+
+    def run(self, np.ndarray samples not None, dir=None):
+        cdef np.ndarray[np.float64_t, ndim=1] output = np.empty(self.num_of_samples())
+        cdef int result
+
+        if dir is None:
+            dir = self.direction()
+
+        result = cpolycomp.pcomp_run_chebyshev(self._c_cheb, dir,
+                                               <np.float64_t *> &output.data[0],
+                                               <np.float64_t *> &samples.data[0])
+
+        if result != PCOMP_STAT_SUCCESS:
+            raise ValueError("pcomp_run_chebyshev returned code {0}"
+                             .format(result))
+
+        return output
+
+    cdef cpolycomp.pcomp_chebyshev_t* __ptr(self):
+        return self._c_cheb
+
+################################################################################
+# Polynomial compression (low-level)
+
+def straighten(np.ndarray[np.float64_t, ndim=1] samples not None, period):
+    cdef np.ndarray[np.float64_t, ndim=1] result = np.empty(samples.size)
+
+    cpolycomp.pcomp_straighten(<np.float64_t *> &result.data[0],
+                               <np.float64_t *> &samples.data[0],
+                               samples.size, period)
+
+    return result
+
+cdef class Polycomp:
+    cdef cpolycomp.pcomp_polycomp_t* _c_params
+
+    def __cinit__(self, num_of_samples, num_of_coeffs,
+                  max_allowable_error, algorithm=PCOMP_ALG_USE_CHEBYSHEV):
+        self._c_params = cpolycomp.pcomp_init_polycomp(num_of_samples,
+                                                       num_of_coeffs,
+                                                       max_allowable_error,
+                                                       algorithm)
+
+    def __dispose__(self):
+        cpolycomp.pcomp_free_polycomp(self._c_params)
+
+    cdef cpolycomp.pcomp_polycomp_t* __ptr(self):
+        return self._c_params
+
+cdef class PolycompChunk:
+    cdef cpolycomp.pcomp_polycomp_chunk_t* _c_chunk;
+    cdef Polycomp params
+
+    def __cinit__(self, Polycomp params, num_of_samples):
+        self._c_chunk = cpolycomp.pcomp_init_chunk(num_of_samples)
+        self.params = params
+
+    def __dealloc__(self):
+        cpolycomp.pcomp_free_chunk(self._c_chunk)
+
+    def num_of_samples(self):
+        return cpolycomp.pcomp_chunk_num_of_samples(self._c_chunk)
+
+    def is_compressed(self):
+        return cpolycomp.pcomp_chunk_is_compressed(self._c_chunk) != 0
+
+    def uncompressed_samples(self):
+        cdef size_t num = self.num_of_samples()
+        cdef const double* ptr = cpolycomp.pcomp_chunk_uncompressed_data(self._c_chunk)
+        cdef np.ndarray[np.float64_t, ndim=1] result = np.empty(num)
+        cdef size_t i
+
+        # Copy the memory, as "ptr" is still owned by libpolycomp
+        for i in range(num):
+            result[i] = ptr[i]
+
+        return result
+
+    def num_of_poly_coeffs(self):
+        return cpolycomp.pcomp_chunk_num_of_poly_coeffs(self._c_chunk)
+
+    def poly_coeffs(self):
+        cdef size_t num = self.num_of_poly_coeffs()
+        cdef const double* ptr = cpolycomp.pcomp_chunk_poly_coeffs(self._c_chunk)
+        cdef np.ndarray[np.float64_t, ndim=1] result = np.empty(num)
+        cdef size_t i
+
+        for i in range(num):
+            result[i] = ptr[i]
+
+        return result
+
+    def num_of_cheby_coeffs(self):
+        return cpolycomp.pcomp_chunk_num_of_cheby_coeffs(self._c_chunk)
+
+    def cheby_coeffs(self):
+        cdef size_t num = self.num_of_cheby_coeffs()
+        cdef const double* ptr = cpolycomp.pcomp_chunk_cheby_coeffs(self._c_chunk)
+        cdef np.ndarray[np.float64_t, ndim=1] result = np.empty(num)
+        cdef size_t i
+
+        for i in range(num):
+            result[i] = ptr[i]
+
+        return result
+
+    def compress(self, np.ndarray[np.float64_t, ndim=1] values not None):
+        cdef double max_error
+        cdef int result
+
+        result = cpolycomp.pcomp_run_polycomp_on_chunk(self.params.__ptr(),
+                                                       <np.float64_t *> &values.data[0],
+                                                       values.size,
+                                                       self._c_chunk,
+                                                       &max_error)
+        if result != PCOMP_STAT_SUCCESS:
+            raise ValueError("pcomp_run_polycomp_on_chunk returned code {0}"
+                             .format(result))
+
+        return max_error
+
+    def decompress(self, Chebyshev inv_chebyshev):
+        cdef np.ndarray[np.float64_t, ndim=1] output = np.empty(self.num_of_samples())
+        cdef int result
+        result = cpolycomp.pcomp_decompress_polycomp_chunk(<np.float64_t *> &output.data[0],
+                                                           self._c_chunk,
+                                                           inv_chebyshev.__ptr())
+        if result != PCOMP_STAT_SUCCESS:
+            raise ValueError("pcomp_decompress_polycomp_chunk returned code {0}"
+                             .format(result))
+
+        return output
+
+################################################################################
+# Polynomial compression (high-level)
