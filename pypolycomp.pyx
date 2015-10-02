@@ -3,6 +3,7 @@
 
 cimport cpolycomp
 from cpython cimport array
+
 import array
 
 import numpy as np
@@ -339,7 +340,7 @@ cdef class Chebyshev:
         return self._c_cheb
 
 ################################################################################
-# Polynomial compression (low-level)
+# Polynomial compression
 
 def straighten(np.ndarray[np.float64_t, ndim=1] samples not None, period):
     cdef np.ndarray[np.float64_t, ndim=1] result = np.empty(samples.size)
@@ -359,20 +360,38 @@ cdef class Polycomp:
                                                        num_of_coeffs,
                                                        max_allowable_error,
                                                        algorithm)
+    cdef cpolycomp.pcomp_polycomp_t* __ptr(Polycomp self):
+        return self._c_params
 
     def __dispose__(self):
         cpolycomp.pcomp_free_polycomp(self._c_params)
 
-    cdef cpolycomp.pcomp_polycomp_t* __ptr(self):
-        return self._c_params
+    def samples_per_chunk(Polycomp self):
+        return cpolycomp.pcomp_polycomp_samples_per_chunk(self._c_params)
+
+    def num_of_poly_coeffs(Polycomp self):
+        return cpolycomp.pcomp_polycomp_num_of_poly_coeffs(self._c_params)
+
+    def max_error(Polycomp self):
+        return cpolycomp.pcomp_polycomp_max_error(self._c_params)
+
+    def algorithm(Polycomp self):
+        return cpolycomp.pcomp_polycomp_algorithm(self._c_params)
+
+cdef extern from "stdlib.h":
+    void free(void *) nogil
 
 cdef class PolycompChunk:
     cdef cpolycomp.pcomp_polycomp_chunk_t* _c_chunk;
-    cdef Polycomp params
 
-    def __cinit__(self, Polycomp params, num_of_samples):
+    def __cinit__(PolycompChunk self):
+        self._c_chunk = NULL
+
+    def init_with_num_of_samples(self, num_of_samples):
         self._c_chunk = cpolycomp.pcomp_init_chunk(num_of_samples)
-        self.params = params
+
+    def init_with_ptr(self, ptr):
+        self._c_chunk = <cpolycomp.pcomp_polycomp_chunk_t*> ptr
 
     def __dealloc__(self):
         cpolycomp.pcomp_free_chunk(self._c_chunk)
@@ -384,6 +403,9 @@ cdef class PolycompChunk:
         return cpolycomp.pcomp_chunk_is_compressed(self._c_chunk) != 0
 
     def uncompressed_samples(self):
+        if not self.is_compressed():
+            return np.array([])
+
         cdef size_t num = self.num_of_samples()
         cdef const double* ptr = cpolycomp.pcomp_chunk_uncompressed_data(self._c_chunk)
         cdef np.ndarray[np.float64_t, ndim=1] result = np.empty(num)
@@ -423,11 +445,12 @@ cdef class PolycompChunk:
 
         return result
 
-    def compress(self, np.ndarray[np.float64_t, ndim=1] values not None):
+    def compress(self, np.ndarray[np.float64_t, ndim=1] values not None,
+                 Polycomp params):
         cdef double max_error
         cdef int result
 
-        result = cpolycomp.pcomp_run_polycomp_on_chunk(self.params.__ptr(),
+        result = cpolycomp.pcomp_run_polycomp_on_chunk(params.__ptr(),
                                                        <np.float64_t *> &values.data[0],
                                                        values.size,
                                                        self._c_chunk,
@@ -450,5 +473,30 @@ cdef class PolycompChunk:
 
         return output
 
-################################################################################
-# Polynomial compression (high-level)
+    def compress(PolycompChunk self,
+                 np.ndarray[np.float64_t, ndim=1] samples not None,
+                 Polycomp params):
+        cdef cpolycomp.pcomp_polycomp_chunk_t** chunk_array
+        cdef size_t num_of_chunks
+        cdef int result
+
+        result = cpolycomp.pcomp_compress_polycomp(&chunk_array, &num_of_chunks,
+                                                   <np.float64_t *> &samples.data[0],
+                                                   samples.size,
+                                                   params.__ptr())
+        if result != PCOMP_STAT_SUCCESS:
+            raise ValueError("pcomp_compress_polycomp returned code {0}"
+                             .format(result))
+
+        list_of_chunks = []
+        for i in range(num_of_chunks):
+            new_chunk = PolycompChunk()
+            new_chunk.init_with_ptr(<object> chunk_array[i])
+
+            list_of_chunks.append(new_chunk)
+
+        free(chunk_array)
+        return list_of_chunks
+
+    def decompress(Polycomp self):
+        pass

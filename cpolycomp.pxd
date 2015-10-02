@@ -224,6 +224,11 @@ cdef extern from "libpolycomp.h":
                                           double max_allowable_error,
                                           int algorithm)
     void pcomp_free_polycomp(pcomp_polycomp_t* params)
+    size_t pcomp_polycomp_samples_per_chunk(pcomp_polycomp_t* params)
+    size_t pcomp_polycomp_num_of_poly_coeffs(
+        pcomp_polycomp_t* params)
+    double pcomp_polycomp_max_error(pcomp_polycomp_t* params)
+    int pcomp_polycomp_algorithm(pcomp_polycomp_t* params)
 
     int pcomp_run_polycomp_on_chunk(pcomp_polycomp_t* params,
                                     double* input,
@@ -237,25 +242,10 @@ cdef extern from "libpolycomp.h":
 
     # Polynomial compression (high-level functions)
 
-    ctypedef struct pcomp_poly_parameters_t:
-        pass
-
-    pcomp_poly_parameters_t* pcomp_init_poly_parameters(size_t chunk_size,
-                                                        size_t num_of_poly_coeffs,
-                                                        double max_error,
-                                                        int algorithm)
-    void pcomp_free_poly_parameters(pcomp_poly_parameters_t* params)
-
-    size_t pcomp_poly_parameters_chunk_size(pcomp_poly_parameters_t* params)
-    size_t pcomp_poly_parameters_num_of_poly_coeffs(
-        pcomp_poly_parameters_t* params)
-    double pcomp_poly_parameters_max_error(pcomp_poly_parameters_t* params)
-    int pcomp_poly_parameters_algorithm(pcomp_poly_parameters_t* params)
-
     int pcomp_compress_polycomp(pcomp_polycomp_chunk_t** chunk_array[],
                                 size_t* num_of_chunks,
                                 double* input_buf, size_t input_size,
-                                pcomp_poly_parameters_t* params)
+                                pcomp_polycomp_t* params)
 
     size_t pcomp_total_num_of_samples(pcomp_polycomp_chunk_t* chunk_array[],
                                       size_t num_of_chunks)
