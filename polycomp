@@ -4,7 +4,7 @@
 import pypolycomp as ppc
 
 def main():
-    print("Version: {0}".format(ppc.__version__()))
+    print("Version: {0}".format(ppc.__version__))
 
 if __name__ == "__main__":
     main()
