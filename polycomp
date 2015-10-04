@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+# -*- mode: python -*-
+
+import pypolycomp as ppc
+
+def main():
+    print("Version: {0}".format(ppc.__version__()))
+
+if __name__ == "__main__":
+    main()
