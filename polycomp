@@ -1,10 +1,58 @@
 #!/usr/bin/env python3
 # -*- mode: python -*-
 
+"""Compress/decompress FITS files using polynomial compression and other
+algorithms.
+
+Usage:
+    polycomp compress <schema>
+    polycomp decompress [--output=<output_file>] <input_file>
+    polycomp optimize <fits_file>
+    polycomp info <input_file>
+    polycomp (-h | --help)
+    polycomp --version
+
+Options:
+    -h, --help              Show this help
+    --version               Print the version number of the executable
+    --output=<output_file>  Specify the name of the output file
+"""
+
+from docopt import docopt
+import pytoml as toml
+import sys
 import pypolycomp as ppc
 
+########################################################################
+
+def do_compress(arguments):
+    try:
+        with open(arguments['<schema>'], 'r') as f:
+            schema = toml.load(f)
+            print(schema)
+
+    except:
+        sys.stderr.write("Unable to load file \"{0}\"\n"
+                         .format(arguments['<schema>']))
+
+########################################################################
+
 def main():
-    print("Version: {0}".format(ppc.__version__))
+    arguments = docopt(__doc__,
+                       version='Polycomp {0}'.format(ppc.__version__))
+
+    if arguments['--version']:
+        print(ppc.__version__)
+    elif arguments['compress']:
+        do_compress(arguments)
+    elif arguments['decompress']:
+        pass
+    elif arguments['optimize']:
+        pass
+    elif arguments['info']:
+        pass
+    else:
+        print('Sorry, I do not know what to do!')
 
 if __name__ == "__main__":
     main()
