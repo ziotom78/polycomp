@@ -26,14 +26,19 @@ import pypolycomp as ppc
 ########################################################################
 
 def do_compress(arguments):
+    file_name = arguments['<schema>']
     try:
-        with open(arguments['<schema>'], 'r') as f:
+        with open(file_name, 'r') as f:
             schema = toml.load(f)
             print(schema)
 
-    except:
-        sys.stderr.write("Unable to load file \"{0}\"\n"
-                         .format(arguments['<schema>']))
+    except (OSError, IOError) as e:
+        sys.stderr.write("unable to load file \"{0}\": {1}\n"
+                         .format(file_name, e.strerror))
+
+    except toml.TomlError as e:
+        sys.stderr.write("invalid TOML file \"{0}\": {1}\n"
+                         .format(file_name, e.strerror))
 
 ########################################################################
 
