@@ -1,4 +1,8 @@
-build/
 *~
-pypolycomp.c
-pypolycomp.so
+*.pyc
+*.c
+*.so
+polycomp
+dist/
+polycomp.egg-info/
+build/
