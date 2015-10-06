@@ -43,28 +43,29 @@ def rle_compress(np.ndarray values not None):
     cdef np.ndarray[np.int8_t, ndim=1] output = np.empty(num_of_bytes,
                                                          dtype='int8')
 
-    if values.dtype in (np.int8, np.uint8):
+    dtype = values.dtype
+    if np.issubdtype(dtype, np.int8) or np.issubdtype(dtype, np.uint8):
         result = cpolycomp.pcomp_compress_rle_int8(<np.int8_t *> &output.data[0],
                                                    &real_size,
                                                    <np.int8_t *> &values.data[0],
                                                    values.size)
-    elif values.dtype in (np.int16, np.uint16):
+    elif np.issubdtype(dtype, np.int16) or np.issubdtype(dtype, np.uint16):
         result = cpolycomp.pcomp_compress_rle_int16(<np.int16_t *> &output.data[0],
                                                    &real_size,
                                                    <np.int16_t *> &values.data[0],
                                                    values.size)
-    elif values.dtype in (np.int32, np.uint32):
+    elif np.issubdtype(dtype, np.int32) or np.issubdtype(dtype, np.uint32):
         result = cpolycomp.pcomp_compress_rle_int32(<np.int32_t *> &output.data[0],
                                                    &real_size,
                                                    <np.int32_t *> &values.data[0],
                                                    values.size)
-    elif values.dtype in (np.int64, np.uint64):
+    elif np.issubdtype(dtype, np.int64) or np.issubdtype(dtype, np.uint64):
         result = cpolycomp.pcomp_compress_rle_int64(<np.int64_t *> &output.data[0],
                                                    &real_size,
                                                    <np.int64_t *> &values.data[0],
                                                    values.size)
     else:
-        raise ValueError("invalid type {0} for RLE compression"
+        raise ValueError('invalid type "{0}" for RLE compression'
                          .format(str(values.dtype)))
 
     if result != PCOMP_STAT_SUCCESS:
@@ -72,7 +73,7 @@ def rle_compress(np.ndarray values not None):
                          .format(result))
 
     output = np.resize(output, real_size * values.dtype.itemsize)
-    return np.fromstring(output.tobytes(), values.dtype)
+    return np.fromstring(output.tostring(), values.dtype)
 
 def rle_decompress(np.ndarray values not None):
     cdef int result
@@ -81,31 +82,32 @@ def rle_decompress(np.ndarray values not None):
     cdef np.ndarray[np.int8_t, ndim=1] output = np.empty(num_of_bytes,
                                                          dtype='int8')
 
-    if values.dtype in (np.int8, np.uint8):
+    dtype = values.dtype
+    if np.issubdtype(dtype, np.int8) or np.issubdtype(dtype, np.uint8):
         result = cpolycomp.pcomp_decompress_rle_int8(<np.int8_t *> &output.data[0],
                                                      num_of_bytes,
                                                      <np.int8_t *> &values.data[0],
                                                      values.size)
-    elif values.dtype in (np.int16, np.uint16):
+    elif np.issubdtype(dtype, np.int16) or np.issubdtype(dtype, np.uint16):
         result = cpolycomp.pcomp_decompress_rle_int16(<np.int16_t *> &output.data[0],
                                                       num_of_bytes,
                                                       <np.int16_t *> &values.data[0],
                                                       values.size)
-    elif values.dtype in (np.int32, np.uint32):
+    elif np.issubdtype(dtype, np.int32) or np.issubdtype(dtype, np.uint32):
         result = cpolycomp.pcomp_decompress_rle_int32(<np.int32_t *> &output.data[0],
                                                       num_of_bytes,
                                                       <np.int32_t *> &values.data[0],
                                                       values.size)
-    elif values.dtype in (np.int64, np.uint64):
+    elif np.issubdtype(dtype, np.int64) or np.issubdtype(dtype, np.uint64):
         result = cpolycomp.pcomp_decompress_rle_int64(<np.int64_t *> &output.data[0],
                                                       num_of_bytes,
                                                       <np.int64_t *> &values.data[0],
                                                       values.size)
     else:
-        raise ValueError("invalid type {0} for DIFFRLE compression"
+        raise ValueError("invalid type {0} for DIFFRLE decompression"
                          .format(str(values.dtype)))
 
-    return np.fromstring(output.tobytes(), values.dtype)
+    return np.fromstring(output.tostring(), values.dtype)
 
 ################################################################################
 # Differenced RLE compression
@@ -120,28 +122,29 @@ def diffrle_compress(np.ndarray values not None):
     cdef np.ndarray[np.int8_t, ndim=1] output = np.empty(num_of_bytes,
                                                          dtype='int8')
 
-    if values.dtype in (np.int8, np.uint8):
+    dtype = values.dtype
+    if np.issubdtype(dtype, np.int8) or np.issubdtype(dtype, np.uint8):
         result = cpolycomp.pcomp_compress_diffrle_int8(<np.int8_t *> &output.data[0],
                                                    &real_size,
                                                    <np.int8_t *> &values.data[0],
                                                    values.size)
-    elif values.dtype in (np.int16, np.uint16):
+    elif np.issubdtype(dtype, np.int16) or np.issubdtype(dtype, np.uint16):
         result = cpolycomp.pcomp_compress_diffrle_int16(<np.int16_t *> &output.data[0],
                                                    &real_size,
                                                    <np.int16_t *> &values.data[0],
                                                    values.size)
-    elif values.dtype in (np.int32, np.uint32):
+    elif np.issubdtype(dtype, np.int32) or np.issubdtype(dtype, np.uint32):
         result = cpolycomp.pcomp_compress_diffrle_int32(<np.int32_t *> &output.data[0],
                                                    &real_size,
                                                    <np.int32_t *> &values.data[0],
                                                    values.size)
-    elif values.dtype in (np.int64, np.uint64):
+    elif np.issubdtype(dtype, np.int64) or np.issubdtype(dtype, np.uint64):
         result = cpolycomp.pcomp_compress_diffrle_int64(<np.int64_t *> &output.data[0],
                                                    &real_size,
                                                    <np.int64_t *> &values.data[0],
                                                    values.size)
     else:
-        raise ValueError("invalid type {0} for DIFFRLE compression"
+        raise ValueError('invalid type "{0}" for DIFFRLE compression'
                          .format(str(values.dtype)))
 
     if result != PCOMP_STAT_SUCCESS:
@@ -149,7 +152,7 @@ def diffrle_compress(np.ndarray values not None):
                          .format(result))
 
     output = np.resize(output, real_size * values.dtype.itemsize)
-    return np.fromstring(output.tobytes(), values.dtype)
+    return np.fromstring(output.tostring(), values.dtype)
 
 def diffrle_decompress(np.ndarray values not None):
     cdef int result
@@ -158,31 +161,32 @@ def diffrle_decompress(np.ndarray values not None):
     cdef np.ndarray[np.int8_t, ndim=1] output = np.empty(num_of_bytes,
                                                          dtype='int8')
 
-    if values.dtype in (np.int8, np.uint8):
+    dtype = values.dtype
+    if np.issubdtype(dtype, np.int8) or np.issubdtype(dtype, np.uint8):
         result = cpolycomp.pcomp_decompress_diffrle_int8(<np.int8_t *> &output.data[0],
                                                          num_of_bytes,
                                                          <np.int8_t *> &values.data[0],
                                                          values.size)
-    elif values.dtype in (np.int16, np.uint16):
+    elif np.issubdtype(dtype, np.int16) or np.issubdtype(dtype, np.uint16):
         result = cpolycomp.pcomp_decompress_diffrle_int16(<np.int16_t *> &output.data[0],
                                                           num_of_bytes,
                                                           <np.int16_t *> &values.data[0],
                                                           values.size)
-    elif values.dtype in (np.int32, np.uint32):
+    elif np.issubdtype(dtype, np.int32) or np.issubdtype(dtype, np.uint32):
         result = cpolycomp.pcomp_decompress_diffrle_int32(<np.int32_t *> &output.data[0],
                                                           num_of_bytes,
                                                           <np.int32_t *> &values.data[0],
                                                           values.size)
-    elif values.dtype in (np.int64, np.uint64):
+    elif np.issubdtype(dtype, np.int64) or np.issubdtype(dtype, np.uint64):
         result = cpolycomp.pcomp_decompress_diffrle_int64(<np.int64_t *> &output.data[0],
                                                           num_of_bytes,
                                                           <np.int64_t *> &values.data[0],
                                                           values.size)
     else:
-        raise ValueError("invalid type {0} for DIFFRLE compression"
+        raise ValueError("invalid type {0} for DIFFRLE decompression"
                          .format(str(values.dtype)))
 
-    return np.fromstring(output.tobytes(), values.dtype)
+    return np.fromstring(output.tostring(), values.dtype)
 
 ################################################################################
 # Quantization
@@ -219,13 +223,13 @@ cdef class QuantParams:
         cdef np.ndarray[np.int8_t, ndim=1] output = np.empty(num_of_bytes,
                                                              dtype='int8')
 
-        if input_values.dtype == np.float32:
+        if np.issubdtype(input_values.dtype, np.float32):
             cpolycomp.pcomp_compress_quant_float(<np.float32_t *> &output.data[0],
                                                  &real_size,
                                                  <np.float32_t *> &input_values.data[0],
                                                  input_values.size,
                                                  self._c_params)
-        elif input_values.dtype == np.float64:
+        elif np.issubdtype(input_values.dtype, np.float64):
             cpolycomp.pcomp_compress_quant_double(<np.float64_t *> &output.data[0],
                                                   &real_size,
                                                   <np.float64_t *> &input_values.data[0],
