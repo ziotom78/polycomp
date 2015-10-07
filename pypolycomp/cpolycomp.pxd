@@ -207,9 +207,17 @@ cdef extern from "libpolycomp.h":
         pass
 
     pcomp_polycomp_chunk_t* pcomp_init_chunk(size_t num_of_samples);
+    pcomp_polycomp_chunk_t* pcomp_init_uncompressed_chunk(size_t num_of_samples,
+                                                          double* samples);
+    pcomp_polycomp_chunk_t* pcomp_init_compressed_chunk(size_t num_of_samples,
+                                                        size_t num_of_poly_coeffs,
+                                                        const double* poly_coeffs,
+                                                        size_t num_of_cheby_coeffs,
+                                                        const double* cheby_coeffs)
     void pcomp_free_chunk(pcomp_polycomp_chunk_t* chunk);
 
     size_t pcomp_chunk_num_of_samples(pcomp_polycomp_chunk_t* chunk)
+    size_t pcomp_chunk_num_of_bytes(pcomp_polycomp_chunk_t* chunk)
     int pcomp_chunk_is_compressed(pcomp_polycomp_chunk_t* chunk)
     const double* pcomp_chunk_uncompressed_data(pcomp_polycomp_chunk_t* chunk)
     size_t pcomp_chunk_num_of_poly_coeffs(pcomp_polycomp_chunk_t* chunk)
@@ -256,3 +264,5 @@ cdef extern from "libpolycomp.h":
 
     void pcomp_free_chunks(pcomp_polycomp_chunk_t* chunk_array[],
                            size_t num_of_chunks)
+    size_t pcomp_chunks_num_of_bytes(const pcomp_polycomp_chunk_t* chunks[],
+                                     size_t num_of_chunks)
