@@ -5,17 +5,20 @@
 algorithms.
 
 Usage:
-    polycomp compress <schema_file> <output_file>
-    polycomp decompress [--output=<output_file>] [--one-hdu] <input_file>
+    polycomp compress <schema_file> <output_file> [<key=value>...]
+    polycomp decompress [--output=FILE] [--one-hdu] <input_file>
     polycomp optimize <fits_file>
     polycomp info <input_file>
     polycomp (-h | --help)
     polycomp --version
 
+The <key=value> options specify substitutions for the values in the
+schema file.
+
 Options:
     -h, --help              Show this help
     --version               Print the version number of the executable
-    --output=<output_file>  Specify the name of the output file
+    -o FILE, --output=FILE  Specify the name of the output file
     --one-hdu               Save all the data in columns of the same HDU.
                             This only works if all the tables in <input_file>
                             have the same number of elements when decompressed.
@@ -373,6 +376,10 @@ def do_compress(arguments):
     output_file_name = arguments['<output_file>']
     default_conf = {'clobber': 'True',
                     'write_checksum': 'True'}
+    for key_val_pair in arguments['<key=value>']:
+        key, value = key_val_pair.split('=', 1)
+        default_conf[key] = value
+
     parser = configparser.ConfigParser(defaults=default_conf)
 
     try:
@@ -506,7 +513,7 @@ def do_decompress(arguments):
     'decompress' command."""
 
     input_file_name = arguments['<input_file>']
-    output_file_name = arguments['<output_file>']
+    output_file_name = arguments['--output']
     if output_file_name is None:
         output_file_name = input_file_name + "-decompressed.fits"
 
