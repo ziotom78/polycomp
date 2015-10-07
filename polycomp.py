@@ -22,6 +22,7 @@ Options:
 """
 
 from docopt import docopt
+import itertools
 import os.path
 import sys
 import pypolycomp as ppc
@@ -199,29 +200,7 @@ def compress_and_encode_quant(parser, table, samples_format, samples):
 
 ########################################################################
 
-def compress_and_encode_poly(parser, table, samples_format, samples):
-    """Save "samples" in a binary table (polynomial compression)
-
-    This function is called by "compress_to_FITS_table".
-    """
-
-    # Remove unused parameters
-    del samples_format
-
-    num_of_coefficients = parser.getint(table, 'num_of_coefficients')
-    samples_per_chunk = parser.getint(table, 'samples_per_chunk')
-    max_error = parser.getfloat(table, 'max_error')
-    algorithm = ppc.PCOMP_ALG_USE_CHEBYSHEV
-    if not parser.getboolean(table, 'use_chebyshev'):
-        algorithm = ppc.PCOMP_ALG_NO_CHEBYSHEV
-
-    params = ppc.Polycomp(num_of_samples=samples_per_chunk,
-                          num_of_coeffs=num_of_coefficients,
-                          max_allowable_error=max_error,
-                          algorithm=algorithm)
-
-    chunks = ppc.compress_polycomp(samples, params)
-
+def polycomp_chunks_to_FITS_table(chunks, params):
     is_compressed = np.empty(len(chunks), dtype='bool')
     chunk_length = np.empty(len(chunks), dtype='uint64')
     uncompressed = np.empty(len(chunks), dtype=np.object)
@@ -243,20 +222,73 @@ def compress_and_encode_poly(parser, table, samples_format, samples):
         pyfits.Column(name='POLY', format='PD()', array=poly_coeffs),
         pyfits.Column(name='CHEBY', format='PD()', array=cheby_coeffs)])
 
-    hdu.header['PCNPOLY'] = (num_of_coefficients,
+    hdu.header['PCNPOLY'] = (params.num_of_poly_coeffs(),
                              'Number of coefficients of the interpolating polynomial')
-    hdu.header['PCSMPCNK'] = (samples_per_chunk,
+    hdu.header['PCSMPCNK'] = (params.samples_per_chunk(),
                               'Number of samples in each chunk')
-    hdu.header['PCALGOR'] = (algorithm,
+    hdu.header['PCALGOR'] = (params.algorithm(),
                              'Kind of polynomial compression ("algorithm")')
-    hdu.header['PCMAXERR'] = (max_error,
+    hdu.header['PCMAXERR'] = (params.max_error(),
                               'Maximum compression error')
     hdu.header['PCNCOMPR'] = (np.sum(is_compressed.astype(np.uint8)),
                               'Number of compressed chunks')
     hdu.header['PCNCHEBC'] = (len(np.concatenate(cheby_coeffs)),
                               'Number of Chebyshev coefficients in the table')
 
-    return (hdu, chunks.num_of_bytes())
+    return hdu
+
+########################################################################
+
+def compress_and_encode_poly(parser, table, samples_format, samples):
+    """Save "samples" in a binary table (polynomial compression)
+
+    This function is called by "compress_to_FITS_table".
+    """
+
+    # Remove unused parameters
+    del samples_format
+
+    num_of_coefficients_space = parse_intset(parser.get(table, 'num_of_coefficients'))
+    samples_per_chunk_space = parse_intset(parser.get(table, 'samples_per_chunk'))
+    max_error = parser.getfloat(table, 'max_error')
+    algorithm = ppc.PCOMP_ALG_USE_CHEBYSHEV
+    if not parser.getboolean(table, 'use_chebyshev'):
+        algorithm = ppc.PCOMP_ALG_NO_CHEBYSHEV
+
+    explore_param_space = (len(num_of_coefficients_space) > 1) or \
+                          (len(samples_per_chunk_space) > 1)
+
+    errors_in_param_space = []
+    for num_of_coeffs, samples_per_chunk in itertools.product(num_of_coefficients_space,
+                                                              samples_per_chunk_space):
+        params = ppc.Polycomp(num_of_samples=samples_per_chunk,
+                              num_of_coeffs=num_of_coeffs,
+                              max_allowable_error=max_error,
+                              algorithm=algorithm)
+        chunks = ppc.compress_polycomp(samples, params)
+        errors_in_param_space.append((chunks.num_of_bytes(), chunks, params))
+
+        if explore_param_space:
+            log.info('  configuration with num_of_coefficients=%d, '
+                     'samples_per_chunk=%d requires %d bytes',
+                     num_of_coeffs, samples_per_chunk, chunks.num_of_bytes())
+
+    if len(errors_in_param_space) == 0:
+        log.error('polynomial compression parameters expected for table "%s"',
+                  table)
+        sys.exit(1)
+
+    errors_in_param_space.sort(key=lambda x: x[0])
+    num_of_bytes, chunks, params = errors_in_param_space[0]
+    if explore_param_space:
+        log.info('the best compression parameters for "%s" are '
+                 'num_of_coefficients=%d, samples_per_chunk=%d (%d bytes)',
+                 table,
+                 params.num_of_poly_coeffs(),
+                 params.samples_per_chunk(),
+                 num_of_bytes)
+
+    return (polycomp_chunks_to_FITS_table(chunks, params), num_of_bytes)
 
 ########################################################################
 
