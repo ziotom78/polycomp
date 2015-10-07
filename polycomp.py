@@ -6,7 +6,7 @@ algorithms.
 
 Usage:
     polycomp compress <schema_file> <output_file>
-    polycomp decompress [--output=<output_file>] <input_file>
+    polycomp decompress [--output=<output_file>] [--one-hdu] <input_file>
     polycomp optimize <fits_file>
     polycomp info <input_file>
     polycomp (-h | --help)
@@ -16,6 +16,9 @@ Options:
     -h, --help              Show this help
     --version               Print the version number of the executable
     --output=<output_file>  Specify the name of the output file
+    --one-hdu               Save all the data in columns of the same HDU.
+                            This only works if all the tables in <input_file>
+                            have the same number of elements when decompressed.
 """
 
 from docopt import docopt
@@ -79,6 +82,17 @@ def parse_intset(val):
 
 ########################################################################
 
+def to_native_endianness(samples):
+    # Check for endianness
+    if str(samples.dtype)[0] in ('<', '>'):
+        # Convert to native order
+        new_dtype = '=' + str(samples.dtype)[1:]
+        return samples.astype(new_dtype)
+    else:
+        return samples
+
+########################################################################
+
 def get_hdu_and_column_from_schema(parser, table, input_file):
     """Determine which HDU and column to read for the specified table.
 
@@ -119,8 +133,9 @@ def compress_and_encode_none(parser, table, samples_format, samples):
     # Remove unused parameters
     del parser
 
-    return pyfits.BinTableHDU.from_columns([
-        pyfits.Column(name=table, format=samples_format, array=samples)])
+    col = pyfits.Column(name=table, format=samples_format, array=samples)
+    return (pyfits.BinTableHDU.from_columns([col]),
+            samples.itemsize * samples.size)
 
 ########################################################################
 
@@ -134,9 +149,10 @@ def compress_and_encode_rle(parser, table, samples_format, samples):
     del parser
 
     compr_samples = ppc.rle_compress(samples)
-    return pyfits.BinTableHDU.from_columns([
+    return (pyfits.BinTableHDU.from_columns([
         pyfits.Column(name=table, format=samples_format,
-                      array=compr_samples)])
+                      array=compr_samples)]),
+            compr_samples.itemsize * compr_samples.size)
 
 ########################################################################
 
@@ -150,9 +166,10 @@ def compress_and_encode_diffrle(parser, table, samples_format, samples):
     del parser
 
     compr_samples = ppc.diffrle_compress(samples)
-    return pyfits.BinTableHDU.from_columns([
+    return (pyfits.BinTableHDU.from_columns([
         pyfits.Column(name=table, format=samples_format,
-                      array=compr_samples)])
+                      array=compr_samples)]),
+            compr_samples.itemsize * compr_samples.size)
 
 ########################################################################
 
@@ -178,7 +195,7 @@ def compress_and_encode_quant(parser, table, samples_format, samples):
     hdu.header['PCELEMSZ'] = (samples.dtype.itemsize,
                               'Number of bytes per sample')
 
-    return hdu
+    return (hdu, compr_samples.size * compr_samples.itemsize)
 
 ########################################################################
 
@@ -234,8 +251,12 @@ def compress_and_encode_poly(parser, table, samples_format, samples):
                              'Kind of polynomial compression ("algorithm")')
     hdu.header['PCMAXERR'] = (max_error,
                               'Maximum compression error')
+    hdu.header['PCNCOMPR'] = (np.sum(is_compressed.astype(np.uint8)),
+                              'Number of compressed chunks')
+    hdu.header['PCNCHEBC'] = (len(np.concatenate(cheby_coeffs)),
+                              'Number of Chebyshev coefficients in the table')
 
-    return hdu
+    return (hdu, chunks.num_of_bytes())
 
 ########################################################################
 
@@ -285,27 +306,29 @@ def read_and_compress_table(parser, table):
                  table, compression)
 
         samples_format = input_file[hdu].columns.formats[column]
-        samples = input_file[hdu].data.field(column)
-
-        # Check for endianness
-        if str(samples.dtype)[0] in ('<', '>'):
-            # Convert to native order
-            new_dtype = '=' + str(samples.dtype)[1:]
-            samples = samples.astype(new_dtype)
-
-        original_samples_dtype = samples.dtype
+        samples = to_native_endianness(input_file[hdu].data.field(column))
         if parser.has_option(table, 'datatype'):
             samples = np.array(samples, dtype=parser.get(table, 'datatype'))
 
-        cur_hdu = compress_to_FITS_table(parser, table,
-                                         samples_format,
-                                         samples)
+        cur_hdu, num_of_bytes = compress_to_FITS_table(parser, table,
+                                                       samples_format,
+                                                       samples)
+        cur_hdu.name = table
         cur_hdu.header['PCNUMSA'] = (len(samples),
                                      'Number of uncompressed samples')
         cur_hdu.header['PCCOMPR'] = (compression,
                                      'Polycomp compression algorithm')
-        cur_hdu.header['PCSRCTP'] = (str(original_samples_dtype),
+        cur_hdu.header['PCSRCTP'] = (str(samples.dtype),
                                      'Original NumPy type of the data')
+        cur_hdu.header['PCUNCSZ'] = (samples.itemsize * samples.size,
+                                     'Size (in bytes) of the uncompressed data')
+        cur_hdu.header['PCCOMSZ'] = (num_of_bytes,
+                                     'Size (in bytes) of the compressed data')
+        cr = float(cur_hdu.header['PCUNCSZ']) / float(cur_hdu.header['PCCOMSZ'])
+        cur_hdu.header['PCCR'] = (cr, 'Compression ratio')
+        log.info('table %s compressed, %d bytes compressed to %d (cr: %.4f)',
+                 table, cur_hdu.header['PCUNCSZ'], cur_hdu.header['PCCOMSZ'], cr)
+
     return cur_hdu
 
 ########################################################################
@@ -350,6 +373,148 @@ def do_compress(arguments):
         log.error('unable to write to file "%s": %s',
                   output_file_name, exc.strerror)
 
+########################################################################
+
+def decompress_none(hdu):
+    return hdu.data.field(0), hdu.columns.formats[0]
+
+########################################################################
+
+def decompress_rle(hdu):
+    compr_samples = np.asarray(to_native_endianness(hdu.data.field(0)),
+                               dtype=hdu.header['PCSRCTP'])
+    return ppc.rle_decompress(compr_samples), hdu.columns.formats[0]
+
+########################################################################
+
+def decompress_diffrle(hdu):
+    compr_samples = np.asarray(to_native_endianness(hdu.data.field(0)),
+                               dtype=hdu.header['PCSRCTP'])
+    return ppc.diffrle_decompress(compr_samples), hdu.columns.formats[0]
+
+########################################################################
+
+def decompress_quant(hdu):
+    quant = ppc.QuantParams(element_size=hdu.header['PCELEMSZ'],
+                            bits_per_sample=hdu.header['PCBITSPS'])
+    size_to_fits_fmt = {4: '1E', 8: '1D'}
+    compr_samples = to_native_endianness(hdu.data.field(0))
+
+    try:
+        return (quant.decompress(compr_samples,
+                                 hdu.header['PCNUMSA']),
+                size_to_fits_fmt[quant.element_size()])
+    except KeyError:
+        log.error('unable to handle floating-point types which '
+                  'are %d bytes wide, allowed sizes are %s',
+                  quant.element_size(), str(list(size_to_fits_fmt.keys())))
+        sys.exit(1)
+
+########################################################################
+
+def decompress_poly(hdu):
+    if hdu.columns.names != ['ISCOMPR', 'CKLEN', 'UNCOMPR', 'POLY', 'CHEBY']:
+        raise ValueError('unknown sequence of columns for polynomial '
+                         'compression: %s',
+                         str(hdu.columns.names))
+
+    inv_cheby = None
+    samples = np.empty(0, dtype='float64')
+    is_compressed, chunk_len, uncompr, poly, cheby = [hdu.data.field(x)
+                                                      for x in (0, 1, 2, 3, 4)]
+    num_of_chunks = is_compressed.size
+    poly_size = np.array([poly[idx].size for idx in range(num_of_chunks)],
+                         dtype=np.uint64)
+    cheby_size = np.array([cheby[idx].size for idx in range(num_of_chunks)],
+                         dtype=np.uint64)
+    chunk_array = ppc.build_chunk_array(is_compressed=is_compressed.astype(np.uint8),
+                                        chunk_len=chunk_len.astype(np.uint64),
+                                        uncompr=np.concatenate(uncompr),
+                                        poly_size=poly_size,
+                                        poly=np.concatenate(poly),
+                                        cheby_size=cheby_size,
+                                        cheby=np.concatenate(cheby))
+
+    return ppc.decompress_polycomp(chunk_array), '1D'
+
+########################################################################
+
+def decompress_FITS_HDU(hdu):
+    """Read compressed samples from a binary table and decompress them.
+
+    Return the pair (SAMPLES, FMT), where SAMPLES is a NumPy array
+    containing the decompressed samples, and FMT is the FITSIO format
+    associated with the data.
+    """
+
+    decompr_fns = {'none': decompress_none,
+                   'rle': decompress_rle,
+                   'diffrle': decompress_diffrle,
+                   'quantization': decompress_quant,
+                   'polynomial': decompress_poly}
+
+    decompr_fn = None
+    compression = hdu.header['PCCOMPR']
+    try:
+        decompr_fn = decompr_fns[compression]
+    except KeyError as exc:
+        log.error('unknown compression method "%s"', exc.message)
+        return None
+
+    log.info('decompressing table "%s" (compression type: %s)',
+             hdu.name, compression)
+    samples, fmt = decompr_fn(hdu)
+    # Convert the samples to their original NumPy type
+    return np.asarray(samples, dtype=hdu.header['PCSRCTP']), fmt
+
+########################################################################
+
+def do_decompress(arguments):
+    """This function is called when the user uses the command-line
+    'decompress' command."""
+
+    input_file_name = arguments['<input_file>']
+    output_file_name = arguments['<output_file>']
+    if output_file_name is None:
+        output_file_name = input_file_name + "-decompressed.fits"
+
+    one_hdu = arguments['--one-hdu']
+
+    if one_hdu:
+        list_of_tables = []
+    else:
+        list_of_tables = pyfits.HDUList([])
+
+    with pyfits.open(input_file_name) as input_file:
+        log.info('reading file "%s"', input_file_name)
+
+        for cur_hdu in input_file:
+            if type(cur_hdu) is not pyfits.BinTableHDU:
+                continue
+
+            if 'PCCOMPR' not in cur_hdu.header:
+                log.warning('HDU %s seems not to have been created by '
+                            'Polycomp, I will skip it',
+                            cur_hdu.name)
+                continue
+
+            samples, samples_format = decompress_FITS_HDU(cur_hdu)
+            if samples is None:
+                continue
+
+            cur_column = pyfits.Column(name=cur_hdu.name,
+                                       format=samples_format,
+                                       array=samples)
+            if one_hdu:
+                list_of_tables.append(cur_column)
+            else:
+                list_of_tables.append(pyfits.BinTableHDU.from_columns([cur_column]))
+
+    if one_hdu:
+        hdu = pyfits.BinTableHDU.from_columns(list_of_tables)
+        hdu.writeto(output_file_name, clobber=True)
+    else:
+        list_of_tables.writeto(output_file_name, clobber=True)
 
 ########################################################################
 
@@ -366,13 +531,13 @@ def main():
     elif arguments['compress']:
         do_compress(arguments)
     elif arguments['decompress']:
-        pass
+        do_decompress(arguments)
     elif arguments['optimize']:
         pass
     elif arguments['info']:
         pass
     else:
-        print('Sorry, I do not know what to do!')
+        log.error('don''t know what to do')
 
 if __name__ == "__main__":
     main()
