@@ -368,6 +368,18 @@ def read_and_compress_table(parser, table):
 
 ########################################################################
 
+def add_metadata_to_HDU(parser, hdu_header):
+    "Read the [metadata] section and copy each key/value in an HDU"
+
+    # Since parser.options lists the variables in the [DEFAULT]
+    # section as well, we must perform a set subtraction in order to
+    # loop only over the true metadata.
+    defaults = set(parser.defaults().keys())
+    for name in set(parser.options('metadata')) - defaults:
+        hdu_header[name] = parser.get('metadata', name)
+
+########################################################################
+
 def do_compress(arguments):
     """This function is called when the user uses the command-line
     'compress' command."""
@@ -398,6 +410,7 @@ def do_compress(arguments):
         for table in tables:
             output_hdus.append(read_and_compress_table(parser, table))
 
+        add_metadata_to_HDU(parser, output_hdus[0].header)
         output_hdus.writeto(output_file_name,
                             clobber=parser.getboolean('DEFAULT', 'clobber'),
                             checksum=parser.getboolean('DEFAULT',
