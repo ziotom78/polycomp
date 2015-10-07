@@ -6,3 +6,4 @@ polycomp
 dist/
 polycomp.egg-info/
 build/
+pypolycomp/*.html
