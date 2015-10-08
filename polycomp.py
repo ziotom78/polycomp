@@ -97,6 +97,21 @@ def to_native_endianness(samples):
 
 ########################################################################
 
+def shannon_entropy(values):
+    """Compute Shannon's entropy for a set of samples
+
+    The "values" variable must be a NumPy array of integer/floating
+    point numbers. Such numbers will be rounded as 64-bit integers
+    before the computation takes place."""
+
+    bc = np.bincount(values.astype(np.int64))
+    ii = np.nonzero(bc)[0]
+    prob = bc[ii] / float(values.size)
+
+    return np.sum(-prob * np.log2(prob))
+
+########################################################################
+
 def get_hdu_and_column_from_schema(parser, table, input_file):
     """Determine which HDU and column to read for the specified table.
 
@@ -198,6 +213,11 @@ def compress_and_encode_quant(parser, table, samples_format, samples):
                               'Number of bits per quantized sample')
     hdu.header['PCELEMSZ'] = (samples.dtype.itemsize,
                               'Number of bytes per sample')
+
+    amin, amax = [f(samples) for f in (np.amin, np.amax)]
+    scaled_samples = (samples - amin) / (amax - amin) * (2**bits_per_sample)
+    hdu.header['PCENTROP'] = (shannon_entropy(scaled_samples),
+                              'Shannon''s entropy for the quantized data')
 
     return (hdu, compr_samples.size * compr_samples.itemsize)
 
