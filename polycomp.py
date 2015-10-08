@@ -100,6 +100,50 @@ def to_native_endianness(samples):
 
 ########################################################################
 
+def numpy_type_equivalent(x, y):
+    """Return True if x and y are essentially the same type.
+
+    The comparison ignores endianness."""
+
+    return np.issubdtype(x, y) and \
+        (np.dtype(x).itemsize == np.dtype(y).itemsize)
+
+########################################################################
+
+
+def numpy_type_to_fits_type(nptype):
+    """Convert a string representing a NumPy type (e.g., 'int8') into a
+    FITS format character.
+
+    Return the character and the value for BZERO."""
+
+    if numpy_type_equivalent(nptype, 'int8'):
+        return 'B'
+    elif numpy_type_equivalent(nptype, 'int16'):
+        return 'I'
+    elif numpy_type_equivalent(nptype, 'int32'):
+        return 'J'
+    elif numpy_type_equivalent(nptype, 'int64'):
+        return 'K'
+    elif numpy_type_equivalent(nptype, 'uint8'):
+        return 'B'
+    elif numpy_type_equivalent(nptype, 'float32'):
+        return 'E'
+    elif numpy_type_equivalent(nptype, 'float64'):
+        return 'D'
+    elif numpy_type_equivalent(nptype, 'int16'):
+        return 'I'
+    elif numpy_type_equivalent(nptype, 'int32'):
+        return 'J'
+    elif numpy_type_equivalent(nptype, 'int64'):
+        return 'K'
+    else:
+        log.error('unable to save data of type %s into a FITS table',
+                  nptype)
+        sys.exit(1)
+
+########################################################################
+
 def shannon_entropy(values):
     """Compute Shannon's entropy for a set of samples
 
@@ -212,10 +256,14 @@ def compress_and_encode_quant(parser, table, samples_format, samples):
     hdu = pyfits.BinTableHDU.from_columns([
         pyfits.Column(name=table, format='1B',
                       array=compr_samples)])
-    hdu.header['PCBITSPS'] = (bits_per_sample,
+    hdu.header['PCBITSPS'] = (quant.bits_per_sample(),
                               'Number of bits per quantized sample')
-    hdu.header['PCELEMSZ'] = (samples.dtype.itemsize,
+    hdu.header['PCELEMSZ'] = (quant.element_size(),
                               'Number of bytes per sample')
+    hdu.header['PCNORM'] = (quant.normalization(),
+                            'Normalization factor')
+    hdu.header['PCOFS'] = (quant.offset(),
+                           'Offset factor')
 
     # Compute and store the entropy of the quantized samples (this is
     # useful to estimate how much an additional statistical encoding
@@ -527,6 +575,8 @@ def decompress_diffrle(hdu):
 def decompress_quant(hdu):
     quant = ppc.QuantParams(element_size=hdu.header['PCELEMSZ'],
                             bits_per_sample=hdu.header['PCBITSPS'])
+    quant.set_normalization(normalization=hdu.header['PCNORM'],
+                            offset=hdu.header['PCOFS'])
     size_to_fits_fmt = {4: '1E', 8: '1D'}
     compr_samples = to_native_endianness(hdu.data.field(0))
 
@@ -571,17 +621,19 @@ def decompress_poly(hdu):
 
 def decompress_zlib(hdu):
     data = hdu.data.field(0)
+    source_type = np.dtype(hdu.header['PCSRCTP'])
     return (np.fromstring(zlib.decompress(data.tostring()),
-                          dtype=hdu.header['PCSRCTP']),
-            hdu.columns.formats[0])
+                          dtype=source_type),
+            numpy_type_to_fits_type(source_type))
 
 ########################################################################
 
 def decompress_bzip2(hdu):
     data = hdu.data.field(0)
+    source_type = np.dtype(hdu.header['PCSRCTP'])
     return (np.fromstring(bz2.decompress(data.tostring()),
-                          dtype=hdu.header['PCSRCTP']),
-            hdu.columns.formats[0])
+                          dtype=source_type),
+            numpy_type_to_fits_type(source_type))
 
 ########################################################################
 
