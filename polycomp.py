@@ -217,6 +217,9 @@ def compress_and_encode_quant(parser, table, samples_format, samples):
     hdu.header['PCELEMSZ'] = (samples.dtype.itemsize,
                               'Number of bytes per sample')
 
+    # Compute and store the entropy of the quantized samples (this is
+    # useful to estimate how much an additional statistical encoding
+    # stage would improve the compression ratio)
     amin, amax = [f(samples) for f in (np.amin, np.amax)]
     scaled_samples = (samples - amin) / (amax - amin) * (2**bits_per_sample)
     hdu.header['PCENTROP'] = (shannon_entropy(scaled_samples),
