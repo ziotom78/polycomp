@@ -207,6 +207,17 @@ cdef class QuantParams:
     def bits_per_sample(self):
         return cpc.pcomp_quant_bits_per_sample(self._c_params)
 
+    def normalization(self):
+        return cpc.pcomp_quant_normalization(self._c_params)
+
+    def offset(self):
+        return cpc.pcomp_quant_offset(self._c_params)
+
+    def set_normalization(self, normalization, offset):
+        cpc.pcomp_quant_set_normalization(self._c_params,
+                                          normalization,
+                                          offset)
+
     def buf_size(self, input_size):
         return cpc.pcomp_quant_bufsize(input_size, self._c_params)
 

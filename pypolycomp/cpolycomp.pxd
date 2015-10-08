@@ -145,6 +145,11 @@ cdef extern from "libpolycomp.h":
 
     size_t pcomp_quant_element_size(pcomp_quant_params_t* params)
     size_t pcomp_quant_bits_per_sample(pcomp_quant_params_t* params)
+    double pcomp_quant_normalization(pcomp_quant_params_t* params)
+    double pcomp_quant_offset(pcomp_quant_params_t* params)
+
+    void pcomp_quant_set_normalization(pcomp_quant_params_t* params,
+                                       double normalization, double offset)
 
     size_t pcomp_quant_bufsize(size_t input_size,
                                pcomp_quant_params_t* params)
