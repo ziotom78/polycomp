@@ -28,6 +28,9 @@ from docopt import docopt
 import itertools
 import os.path
 import sys
+import time
+import zlib
+import bz2
 import pypolycomp as ppc
 import logging as log
 import re
@@ -315,6 +318,50 @@ def compress_and_encode_poly(parser, table, samples_format, samples):
 
 ########################################################################
 
+def compress_and_encode_zlib(parser, table, samples_format, samples):
+    """Save "samples" in a binary table (zlib compression)
+
+    This function is called by "compress_to_FITS_table".
+    """
+
+    # Remove unused parameters
+    del samples_format
+
+    if parser.has_option(table, 'compression_level'):
+        level = parser.getint(table, 'compression_level')
+    else:
+        level = 9
+
+    compr_samples = zlib.compress(samples.tostring(), level)
+    return (pyfits.BinTableHDU.from_columns([
+        pyfits.Column(name=table, format='1B',
+                      array=np.array(list(compr_samples)))]),
+            len(compr_samples))
+
+########################################################################
+
+def compress_and_encode_bzip2(parser, table, samples_format, samples):
+    """Save "samples" in a binary table (bz2 compression)
+
+    This function is called by "compress_to_FITS_table".
+    """
+
+    # Remove unused parameters
+    del samples_format
+
+    if parser.has_option(table, 'compression_level'):
+        level = parser.getint(table, 'compression_level')
+    else:
+        level = 9
+
+    compr_samples = bz2.compress(samples.tostring(), level)
+    return (pyfits.BinTableHDU.from_columns([
+        pyfits.Column(name=table, format='1B',
+                      array=np.array(list(compr_samples)))]),
+            len(compr_samples))
+
+########################################################################
+
 def compress_to_FITS_table(parser, table, samples_format, samples):
     """Compress samples and save them in a FITS binary table
 
@@ -328,7 +375,9 @@ def compress_to_FITS_table(parser, table, samples_format, samples):
                  'rle': compress_and_encode_rle,
                  'diffrle': compress_and_encode_diffrle,
                  'quantization': compress_and_encode_quant,
-                 'polynomial': compress_and_encode_poly}
+                 'polynomial': compress_and_encode_poly,
+                 'zlib': compress_and_encode_zlib,
+                 'bzip2': compress_and_encode_bzip2}
 
     try:
         compr_and_encode_fn = compr_fns[parser.get(table, 'compression')]
@@ -336,7 +385,11 @@ def compress_to_FITS_table(parser, table, samples_format, samples):
         log.error('unknown compression method "%s"', e.message)
         sys.exit(1)
 
-    return compr_and_encode_fn(parser, table, samples_format, samples)
+    start_time = time.clock()
+    result = compr_and_encode_fn(parser, table, samples_format, samples)
+    end_time = time.clock()
+
+    return result + (end_time - start_time,)
 
 ########################################################################
 
@@ -365,9 +418,9 @@ def read_and_compress_table(parser, table):
         if parser.has_option(table, 'datatype'):
             samples = np.array(samples, dtype=parser.get(table, 'datatype'))
 
-        cur_hdu, num_of_bytes = compress_to_FITS_table(parser, table,
-                                                       samples_format,
-                                                       samples)
+        cur_hdu, num_of_bytes, elapsed_time = compress_to_FITS_table(parser, table,
+                                                                     samples_format,
+                                                                     samples)
         cur_hdu.name = table
         cur_hdu.header['PCNUMSA'] = (len(samples),
                                      'Number of uncompressed samples')
@@ -379,6 +432,8 @@ def read_and_compress_table(parser, table):
                                      'Size (in bytes) of the uncompressed data')
         cur_hdu.header['PCCOMSZ'] = (num_of_bytes,
                                      'Size (in bytes) of the compressed data')
+        cur_hdu.header['PCTIME'] = (elapsed_time,
+                                    'Time (in seconds) used for compression')
         cr = float(cur_hdu.header['PCUNCSZ']) / float(cur_hdu.header['PCCOMSZ'])
         cur_hdu.header['PCCR'] = (cr, 'Compression ratio')
         log.info('table %s compressed, %d bytes compressed to %d (cr: %.4f)',
@@ -507,7 +562,23 @@ def decompress_poly(hdu):
                                         cheby_size=cheby_size,
                                         cheby=np.concatenate(cheby))
 
-    return ppc.decompress_polycomp(chunk_array), '1D'
+    return ppc.decompress_polycomp(chunk_array), 'D'
+
+########################################################################
+
+def decompress_zlib(hdu):
+    data = hdu.data.field(0)
+    return (np.fromstring(zlib.decompress(data.tostring()),
+                          dtype=hdu.header['PCSRCTP']),
+            hdu.columns.formats[0])
+
+########################################################################
+
+def decompress_bzip2(hdu):
+    data = hdu.data.field(0)
+    return (np.fromstring(bz2.decompress(data.tostring()),
+                          dtype=hdu.header['PCSRCTP']),
+            hdu.columns.formats[0])
 
 ########################################################################
 
@@ -523,7 +594,9 @@ def decompress_FITS_HDU(hdu):
                    'rle': decompress_rle,
                    'diffrle': decompress_diffrle,
                    'quantization': decompress_quant,
-                   'polynomial': decompress_poly}
+                   'polynomial': decompress_poly,
+                   'zlib': decompress_zlib,
+                   'bzip2': decompress_bzip2}
 
     decompr_fn = None
     compression = hdu.header['PCCOMPR']
