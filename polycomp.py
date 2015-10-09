@@ -5,8 +5,8 @@
 algorithms.
 
 Usage:
-    polycomp compress <schema_file> <output_file> [<key=value>...]
-    polycomp decompress [--output=FILE] [--one-hdu] <input_file>
+    polycomp compress [--tables=LIST] <schema_file> <output_file> [<key=value>...]
+    polycomp decompress [--output=FILE] [--tables=LIST] [--one-hdu] <input_file>
     polycomp optimize <fits_file>
     polycomp info <input_file>
     polycomp (-h | --help)
@@ -22,6 +22,9 @@ Options:
     --one-hdu               Save all the data in columns of the same HDU.
                             This only works if all the tables in <input_file>
                             have the same number of elements when decompressed.
+    -t LIST, --tables=LIST  Comma-separated list of tables to be (de)compressed.
+                            If this flag is not provided, all tables will be
+                            processed.
 """
 
 from docopt import docopt
@@ -459,7 +462,7 @@ def read_and_compress_table(parser, table):
                                                      input_file)
         compression = parser.get(table, 'compression')
         log.info('compressing file %s (HDU %s, column %s) '
-                 'into table %s, '
+                 'into table "%s", '
                  'compression is "%s"',
                  input_file_name, str(hdu), str(column),
                  table, compression)
@@ -487,7 +490,7 @@ def read_and_compress_table(parser, table):
                                     'Time (in seconds) used for compression')
         cr = float(cur_hdu.header['PCUNCSZ']) / float(cur_hdu.header['PCCOMSZ'])
         cur_hdu.header['PCCR'] = (cr, 'Compression ratio')
-        log.info('table %s compressed, %d bytes compressed to %d (cr: %.4f)',
+        log.info('table "%s" compressed, %d bytes compressed to %d (cr: %.4f)',
                  table, cur_hdu.header['PCUNCSZ'], cur_hdu.header['PCCOMSZ'], cr)
 
     return cur_hdu
@@ -512,6 +515,7 @@ def do_compress(arguments):
 
     schema_file_name = arguments['<schema_file>']
     output_file_name = arguments['<output_file>']
+    table_list = arguments['--tables']
     default_conf = {'clobber': 'True',
                     'write_checksum': 'True'}
     for key_val_pair in arguments['<key=value>']:
@@ -534,6 +538,9 @@ def do_compress(arguments):
         output_hdus = pyfits.HDUList()
 
         for table in tables:
+            if (table_list is not None) and (table not in table_list):
+                continue
+
             output_hdus.append(read_and_compress_table(parser, table))
 
         add_metadata_to_HDU(parser, output_hdus[0].header)
@@ -675,6 +682,7 @@ def do_decompress(arguments):
 
     input_file_name = arguments['<input_file>']
     output_file_name = arguments['--output']
+    table_list = arguments['--tables']
     if output_file_name is None:
         output_file_name = input_file_name + "-decompressed.fits"
 
@@ -696,6 +704,9 @@ def do_decompress(arguments):
                 log.warning('HDU %s seems not to have been created by '
                             'Polycomp, I will skip it',
                             cur_hdu.name)
+                continue
+
+            if (table_list is not None) and cur_hdu.name not in table_list:
                 continue
 
             samples, samples_format = decompress_FITS_HDU(cur_hdu)
