@@ -7,8 +7,6 @@ algorithms.
 Usage:
     polycomp compress [--tables=LIST] [--save-opt] [--debug] <schema_file> <output_file> [<key=value>...]
     polycomp decompress [--output=FILE] [--tables=LIST] [--one-hdu] <input_file>
-    polycomp optimize <fits_file>
-    polycomp info <input_file>
     polycomp (-h | --help)
     polycomp --version
 
@@ -855,10 +853,6 @@ def main():
         do_compress(arguments)
     elif arguments['decompress']:
         do_decompress(arguments)
-    elif arguments['optimize']:
-        pass
-    elif arguments['info']:
-        pass
     else:
         log.error('don''t know what to do')
 
