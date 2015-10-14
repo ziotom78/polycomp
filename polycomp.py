@@ -99,6 +99,8 @@ def parse_intset(val):
 ########################################################################
 
 def to_native_endianness(samples):
+    "Convert the endianness of a NumPy array into native."
+
     # Check for endianness
     if str(samples.dtype)[0] in ('<', '>'):
         # Convert to native order
@@ -313,19 +315,19 @@ def polycomp_chunks_to_FITS_table_debug(chunks, params):
         pyfits.Column(name='CHEBY', format='PD()', array=cheby_coeffs)])
 
     hdu.header['PCNPOLY'] = (params.num_of_poly_coeffs(),
-                             'Number of coefficients of the interpolating polynomial')
+                             '# of coeffs of the interpolating polynomial')
     hdu.header['PCSMPCNK'] = (params.samples_per_chunk(),
-                              'Number of samples in each chunk')
+                              '# of samples in each chunk')
     hdu.header['PCALGOR'] = (params.algorithm(),
                              'Kind of polynomial compression ("algorithm")')
     hdu.header['PCMAXERR'] = (params.max_error(),
                               'Maximum compression error')
     hdu.header['PCNCOMPR'] = (np.sum(is_compressed.astype(np.uint8)),
-                              'Number of compressed chunks')
+                              '# of compressed chunks')
     hdu.header['PCNCHEBC'] = (len(np.concatenate(cheby_coeffs)),
-                              'Number of Chebyshev coefficients in the table')
+                              '# of Chebyshev coeffs in the table')
     hdu.header['PCDEBUG'] = (1,
-                             'List of chunks saved in extended format')
+                             'This table uses the extended format')
 
     return hdu
 
@@ -347,19 +349,19 @@ def polycomp_chunks_to_FITS_table(chunks, params):
         cheby_coeffs[chunk_idx] = cur_chunk.cheby_coeffs()
 
     hdu.header['PCNPOLY'] = (params.num_of_poly_coeffs(),
-                             'Number of coefficients of the interpolating polynomial')
+                             '# of coeffs of the interpolating polynomial')
     hdu.header['PCSMPCNK'] = (params.samples_per_chunk(),
-                              'Number of samples in each chunk')
+                              '# of samples in each chunk')
     hdu.header['PCALGOR'] = (params.algorithm(),
                              'Kind of polynomial compression ("algorithm")')
     hdu.header['PCMAXERR'] = (params.max_error(),
                               'Maximum compression error')
     hdu.header['PCNCOMPR'] = (np.sum(is_compressed.astype(np.uint8)),
-                              'Number of compressed chunks')
+                              '# of compressed chunks')
     hdu.header['PCNCHEBC'] = (len(np.concatenate(cheby_coeffs)),
-                              'Number of Chebyshev coefficients in the table')
+                              '# of Chebyshev coeffs in the table')
     hdu.header['PCDEBUG'] = (0,
-                             'List of chunks saved in compact format')
+                             'This table uses the compact format')
 
     return hdu
 
@@ -636,11 +638,15 @@ def do_compress(arguments):
 ########################################################################
 
 def decompress_none(hdu):
+    "Decompress an HDU which uses no compression"
+
     return hdu.data.field(0), hdu.columns.formats[0]
 
 ########################################################################
 
 def decompress_rle(hdu):
+    "Decompress an HDU containing a RLE-compressed datastream"
+
     compr_samples = np.asarray(to_native_endianness(hdu.data.field(0)),
                                dtype=hdu.header['PCSRCTP'])
     return ppc.rle_decompress(compr_samples), hdu.columns.formats[0]
@@ -648,6 +654,8 @@ def decompress_rle(hdu):
 ########################################################################
 
 def decompress_diffrle(hdu):
+    "Decompress an HDU containing a diffRLE-compressed datastream"
+
     compr_samples = np.asarray(to_native_endianness(hdu.data.field(0)),
                                dtype=hdu.header['PCSRCTP'])
     return ppc.diffrle_decompress(compr_samples), hdu.columns.formats[0]
@@ -655,6 +663,8 @@ def decompress_diffrle(hdu):
 ########################################################################
 
 def decompress_quant(hdu):
+    "Decompress an HDU containing quantized data"
+
     quant = ppc.QuantParams(element_size=hdu.header['PCELEMSZ'],
                             bits_per_sample=hdu.header['PCBITSPS'])
     quant.set_normalization(normalization=hdu.header['PCNORM'],
@@ -675,6 +685,8 @@ def decompress_quant(hdu):
 ########################################################################
 
 def decompress_poly_debug(hdu):
+    "Decompress an HDU containing polynomial compressed data in debug form"
+
     if hdu.columns.names != ['ISCOMPR', 'CKLEN', 'UNCOMPR', 'POLY', 'CHEBY']:
         raise ValueError('unknown sequence of columns for polynomial '
                          'compression: %s',
@@ -704,6 +716,8 @@ def decompress_poly_debug(hdu):
 ########################################################################
 
 def decompress_poly_compact(hdu):
+    "Decompress an HDU containing polynomial compressed data in compact form"
+
     raw_bytes = to_native_endianness(hdu.data.field(0))
     chunk_array = ppc.decode_chunk_array(raw_bytes)
     return ppc.decompress_polycomp(chunk_array), 'D'
@@ -711,6 +725,8 @@ def decompress_poly_compact(hdu):
 ########################################################################
 
 def decompress_poly(hdu):
+    "Decompress an HDU containing polynomial compressed data"
+
     if hdu.header['PCDEBUG'] != 0:
         return decompress_poly_debug(hdu)
     else:
@@ -719,6 +735,8 @@ def decompress_poly(hdu):
 ########################################################################
 
 def decompress_zlib(hdu):
+    "Decompress an HDU containing a datastream compressed using zlib"
+
     data = hdu.data.field(0)
     source_type = np.dtype(hdu.header['PCSRCTP'])
     return (np.fromstring(zlib.decompress(data.tostring()),
@@ -728,6 +746,8 @@ def decompress_zlib(hdu):
 ########################################################################
 
 def decompress_bzip2(hdu):
+    "Decompress an HDU containing a datastream compressed using bzip2"
+
     data = hdu.data.field(0)
     source_type = np.dtype(hdu.header['PCSRCTP'])
     return (np.fromstring(bz2.decompress(data.tostring()),
