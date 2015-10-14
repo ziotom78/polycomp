@@ -5,7 +5,7 @@
 algorithms.
 
 Usage:
-    polycomp compress [--tables=LIST] <schema_file> <output_file> [<key=value>...]
+    polycomp compress [--tables=LIST] [--save-opt] [--debug] <schema_file> <output_file> [<key=value>...]
     polycomp decompress [--output=FILE] [--tables=LIST] [--one-hdu] <input_file>
     polycomp optimize <fits_file>
     polycomp info <input_file>
@@ -18,16 +18,22 @@ schema file.
 Options:
     -h, --help              Show this help
     --version               Print the version number of the executable
+    --debug                 When saving data compressed using the polynomial
+                            compression, use an extended format that is easier
+                            to debug. This wastes some space (typically less than 10%).
     -o FILE, --output=FILE  Specify the name of the output file
     --one-hdu               Save all the data in columns of the same HDU.
                             This only works if all the tables in <input_file>
                             have the same number of elements when decompressed.
+    --save-opt              Save every result of polynomial parameter optimization
+                            into separate FITS files.
     -t LIST, --tables=LIST  Comma-separated list of tables to be (de)compressed.
                             If this flag is not provided, all tables will be
                             processed.
 """
 
 from docopt import docopt
+from collections import namedtuple
 import itertools
 import os.path
 import sys
@@ -193,7 +199,7 @@ def get_hdu_and_column_from_schema(parser, table, input_file):
 
 ########################################################################
 
-def compress_and_encode_none(parser, table, samples_format, samples):
+def compress_and_encode_none(parser, table, samples_format, samples, debug):
     """Save "samples" in a binary table (uncompressed form)
 
     This function is called by "compress_to_FITS_table".
@@ -201,6 +207,7 @@ def compress_and_encode_none(parser, table, samples_format, samples):
 
     # Remove unused parameters
     del parser
+    del debug
 
     col = pyfits.Column(name=table, format=samples_format, array=samples)
     return (pyfits.BinTableHDU.from_columns([col]),
@@ -208,7 +215,7 @@ def compress_and_encode_none(parser, table, samples_format, samples):
 
 ########################################################################
 
-def compress_and_encode_rle(parser, table, samples_format, samples):
+def compress_and_encode_rle(parser, table, samples_format, samples, debug):
     """Save "samples" in a binary table (RLE compression)
 
     This function is called by "compress_to_FITS_table".
@@ -216,6 +223,7 @@ def compress_and_encode_rle(parser, table, samples_format, samples):
 
     # Remove unused parameters
     del parser
+    del debug
 
     compr_samples = ppc.rle_compress(samples)
     return (pyfits.BinTableHDU.from_columns([
@@ -225,7 +233,7 @@ def compress_and_encode_rle(parser, table, samples_format, samples):
 
 ########################################################################
 
-def compress_and_encode_diffrle(parser, table, samples_format, samples):
+def compress_and_encode_diffrle(parser, table, samples_format, samples, debug):
     """Save "samples" in a binary table (differenced RLE compression)
 
     This function is called by "compress_to_FITS_table".
@@ -233,6 +241,7 @@ def compress_and_encode_diffrle(parser, table, samples_format, samples):
 
     # Remove unused parameters
     del parser
+    del debug
 
     compr_samples = ppc.diffrle_compress(samples)
     return (pyfits.BinTableHDU.from_columns([
@@ -242,7 +251,7 @@ def compress_and_encode_diffrle(parser, table, samples_format, samples):
 
 ########################################################################
 
-def compress_and_encode_quant(parser, table, samples_format, samples):
+def compress_and_encode_quant(parser, table, samples_format, samples, debug):
     """Save "samples" in a binary table (quantization)
 
     This function is called by "compress_to_FITS_table".
@@ -250,6 +259,7 @@ def compress_and_encode_quant(parser, table, samples_format, samples):
 
     # Remove unused parameters
     del samples_format
+    del debug
 
     bits_per_sample = parser.getint(table, 'bits_per_sample')
     quant = ppc.QuantParams(element_size=samples.dtype.itemsize,
@@ -280,7 +290,7 @@ def compress_and_encode_quant(parser, table, samples_format, samples):
 
 ########################################################################
 
-def polycomp_chunks_to_FITS_table(chunks, params):
+def polycomp_chunks_to_FITS_table_debug(chunks, params):
     is_compressed = np.empty(len(chunks), dtype='bool')
     chunk_length = np.empty(len(chunks), dtype='uint64')
     uncompressed = np.empty(len(chunks), dtype=np.object)
@@ -314,12 +324,51 @@ def polycomp_chunks_to_FITS_table(chunks, params):
                               'Number of compressed chunks')
     hdu.header['PCNCHEBC'] = (len(np.concatenate(cheby_coeffs)),
                               'Number of Chebyshev coefficients in the table')
+    hdu.header['PCDEBUG'] = (1,
+                             'List of chunks saved in extended format')
 
     return hdu
 
 ########################################################################
 
-def compress_and_encode_poly(parser, table, samples_format, samples):
+def polycomp_chunks_to_FITS_table(chunks, params):
+
+    raw_bytes = chunks.encode()
+    hdu = pyfits.BinTableHDU.from_columns([
+        pyfits.Column(name='BYTES', format='1B', array=raw_bytes)])
+
+    # Compute a few interesting quantities
+    is_compressed = np.empty(len(chunks), dtype='bool')
+    cheby_coeffs = np.empty(len(chunks), dtype=np.object)
+
+    for chunk_idx in range(len(chunks)):
+        cur_chunk = chunks[chunk_idx]
+        is_compressed[chunk_idx] = cur_chunk.is_compressed()
+        cheby_coeffs[chunk_idx] = cur_chunk.cheby_coeffs()
+
+    hdu.header['PCNPOLY'] = (params.num_of_poly_coeffs(),
+                             'Number of coefficients of the interpolating polynomial')
+    hdu.header['PCSMPCNK'] = (params.samples_per_chunk(),
+                              'Number of samples in each chunk')
+    hdu.header['PCALGOR'] = (params.algorithm(),
+                             'Kind of polynomial compression ("algorithm")')
+    hdu.header['PCMAXERR'] = (params.max_error(),
+                              'Maximum compression error')
+    hdu.header['PCNCOMPR'] = (np.sum(is_compressed.astype(np.uint8)),
+                              'Number of compressed chunks')
+    hdu.header['PCNCHEBC'] = (len(np.concatenate(cheby_coeffs)),
+                              'Number of Chebyshev coefficients in the table')
+    hdu.header['PCDEBUG'] = (0,
+                             'List of chunks saved in compact format')
+
+    return hdu
+
+########################################################################
+
+ParameterPoint = namedtuple('ParameterPoint',
+                            ['hdu', 'hdu_data_size', 'chunks', 'params'])
+
+def compress_and_encode_poly(parser, table, samples_format, samples, debug):
     """Save "samples" in a binary table (polynomial compression)
 
     This function is called by "compress_to_FITS_table".
@@ -346,33 +395,52 @@ def compress_and_encode_poly(parser, table, samples_format, samples):
                               max_allowable_error=max_error,
                               algorithm=algorithm)
         chunks = ppc.compress_polycomp(samples, params)
-        errors_in_param_space.append((chunks.num_of_bytes(), chunks, params))
+
+        if debug:
+            cur_hdu = polycomp_chunks_to_FITS_table_debug(chunks, params)
+        else:
+            cur_hdu = polycomp_chunks_to_FITS_table(chunks, params)
+
+        # Use the size of the data part as figure of merit. This is
+        # calculated as the number of bytes required for the whole HDU
+        # minus the size of the header
+        cur_num_of_bytes = cur_hdu.filebytes() - len(str(cur_hdu.header))
+        cur_point = ParameterPoint(hdu_data_size=cur_num_of_bytes,
+                                   hdu=cur_hdu,
+                                   chunks=chunks,
+                                   params=params)
+        errors_in_param_space.append(cur_point)
 
         if explore_param_space:
+            chunk_bytes = chunks.num_of_bytes()
             log.info('  configuration with num_of_coefficients=%d, '
-                     'samples_per_chunk=%d requires %d bytes',
-                     num_of_coeffs, samples_per_chunk, chunks.num_of_bytes())
+                     'samples_per_chunk=%d requires %d bytes (raw '
+                     'data would have required %d, the increment is %.2f%%)',
+                     num_of_coeffs, samples_per_chunk,
+                     cur_num_of_bytes,
+                     chunk_bytes,
+                     (cur_num_of_bytes - chunk_bytes) * 100.0 / chunk_bytes)
 
     if len(errors_in_param_space) == 0:
         log.error('polynomial compression parameters expected for table "%s"',
                   table)
         sys.exit(1)
 
-    errors_in_param_space.sort(key=lambda x: x[0])
-    num_of_bytes, chunks, params = errors_in_param_space[0]
+    errors_in_param_space.sort(key=lambda x: x.hdu_data_size)
+    best_configuration = errors_in_param_space[0]
     if explore_param_space:
         log.info('the best compression parameters for "%s" are '
                  'num_of_coefficients=%d, samples_per_chunk=%d (%d bytes)',
                  table,
-                 params.num_of_poly_coeffs(),
-                 params.samples_per_chunk(),
-                 num_of_bytes)
+                 best_configuration.params.num_of_poly_coeffs(),
+                 best_configuration.params.samples_per_chunk(),
+                 best_configuration.hdu_data_size)
 
-    return (polycomp_chunks_to_FITS_table(chunks, params), num_of_bytes)
+    return (best_configuration.hdu, best_configuration.hdu_data_size)
 
 ########################################################################
 
-def compress_and_encode_zlib(parser, table, samples_format, samples):
+def compress_and_encode_zlib(parser, table, samples_format, samples, debug):
     """Save "samples" in a binary table (zlib compression)
 
     This function is called by "compress_to_FITS_table".
@@ -394,7 +462,7 @@ def compress_and_encode_zlib(parser, table, samples_format, samples):
 
 ########################################################################
 
-def compress_and_encode_bzip2(parser, table, samples_format, samples):
+def compress_and_encode_bzip2(parser, table, samples_format, samples, debug):
     """Save "samples" in a binary table (bz2 compression)
 
     This function is called by "compress_to_FITS_table".
@@ -416,7 +484,7 @@ def compress_and_encode_bzip2(parser, table, samples_format, samples):
 
 ########################################################################
 
-def compress_to_FITS_table(parser, table, samples_format, samples):
+def compress_to_FITS_table(parser, table, samples_format, samples, debug):
     """Compress samples and save them in a FITS binary table
 
     The compression parameters are taken from the section named "table"
@@ -440,20 +508,20 @@ def compress_to_FITS_table(parser, table, samples_format, samples):
         sys.exit(1)
 
     start_time = time.clock()
-    result = compr_and_encode_fn(parser, table, samples_format, samples)
+    result = compr_and_encode_fn(parser, table, samples_format, samples, debug)
     end_time = time.clock()
 
     return result + (end_time - start_time,)
 
 ########################################################################
 
-def read_and_compress_table(parser, table):
+def read_and_compress_table(parser, table, debug):
     """Read data from a FITS file and save it into a FITS binary table
 
     The data are read from the FITS file specified in the "table"
     section of the "parser" object (an instance of
-    ConfigurationParser).
-    """
+    ConfigurationParser). If "debug" is true, save additional
+    information (useful for debugging) in the table."""
 
     input_file_name = os.path.normpath(parser.get(table, 'file'))
     cur_hdu = None
@@ -474,7 +542,8 @@ def read_and_compress_table(parser, table):
 
         cur_hdu, num_of_bytes, elapsed_time = compress_to_FITS_table(parser, table,
                                                                      samples_format,
-                                                                     samples)
+                                                                     samples,
+                                                                     debug)
         cur_hdu.name = table
         cur_hdu.header['PCNUMSA'] = (len(samples),
                                      'Number of uncompressed samples')
@@ -524,6 +593,11 @@ def do_compress(arguments):
 
     parser = configparser.ConfigParser(defaults=default_conf)
 
+    if arguments['--debug']:
+        debug_flag = True
+    else:
+        debug_flag = False
+
     try:
         if parser.read(schema_file_name) == []:
             raise IOError(1, 'file not found')
@@ -541,7 +615,8 @@ def do_compress(arguments):
             if (table_list is not None) and (table not in table_list):
                 continue
 
-            output_hdus.append(read_and_compress_table(parser, table))
+            output_hdus.append(read_and_compress_table(parser, table,
+                                                       debug=debug_flag))
 
         add_metadata_to_HDU(parser, output_hdus[0].header)
         output_hdus.writeto(output_file_name,
@@ -599,7 +674,7 @@ def decompress_quant(hdu):
 
 ########################################################################
 
-def decompress_poly(hdu):
+def decompress_poly_debug(hdu):
     if hdu.columns.names != ['ISCOMPR', 'CKLEN', 'UNCOMPR', 'POLY', 'CHEBY']:
         raise ValueError('unknown sequence of columns for polynomial '
                          'compression: %s',
@@ -621,8 +696,25 @@ def decompress_poly(hdu):
                                         poly=np.concatenate(poly),
                                         cheby_size=cheby_size,
                                         cheby=np.concatenate(cheby))
-
+    for idx in range(0, 2):
+        log.debug('%d) first poly coeff: %f (it should have been %f)',
+                  idx + 1, chunk_array[idx].poly_coeffs()[0], poly[idx][0])
     return ppc.decompress_polycomp(chunk_array), 'D'
+
+########################################################################
+
+def decompress_poly_compact(hdu):
+    raw_bytes = to_native_endianness(hdu.data.field(0))
+    chunk_array = ppc.decode_chunk_array(raw_bytes)
+    return ppc.decompress_polycomp(chunk_array), 'D'
+
+########################################################################
+
+def decompress_poly(hdu):
+    if hdu.header['PCDEBUG'] != 0:
+        return decompress_poly_debug(hdu)
+    else:
+        return decompress_poly_compact(hdu)
 
 ########################################################################
 

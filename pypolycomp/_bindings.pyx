@@ -47,24 +47,24 @@ def rle_compress(np.ndarray values not None):
     dtype = values.dtype
     if np.issubdtype(dtype, np.int8) or np.issubdtype(dtype, np.uint8):
         result = cpc.pcomp_compress_rle_int8(<np.int8_t *> &output.data[0],
-                                                   &real_size,
-                                                   <np.int8_t *> &values.data[0],
-                                                   values.size)
+                                             &real_size,
+                                             <np.int8_t *> &values.data[0],
+                                             values.size)
     elif np.issubdtype(dtype, np.int16) or np.issubdtype(dtype, np.uint16):
         result = cpc.pcomp_compress_rle_int16(<np.int16_t *> &output.data[0],
-                                                   &real_size,
-                                                   <np.int16_t *> &values.data[0],
-                                                   values.size)
+                                              &real_size,
+                                              <np.int16_t *> &values.data[0],
+                                              values.size)
     elif np.issubdtype(dtype, np.int32) or np.issubdtype(dtype, np.uint32):
         result = cpc.pcomp_compress_rle_int32(<np.int32_t *> &output.data[0],
-                                                   &real_size,
-                                                   <np.int32_t *> &values.data[0],
-                                                   values.size)
+                                              &real_size,
+                                              <np.int32_t *> &values.data[0],
+                                              values.size)
     elif np.issubdtype(dtype, np.int64) or np.issubdtype(dtype, np.uint64):
         result = cpc.pcomp_compress_rle_int64(<np.int64_t *> &output.data[0],
-                                                   &real_size,
-                                                   <np.int64_t *> &values.data[0],
-                                                   values.size)
+                                              &real_size,
+                                              <np.int64_t *> &values.data[0],
+                                              values.size)
     else:
         raise ValueError('invalid type "{0}" for RLE compression'
                          .format(str(values.dtype)))
@@ -86,24 +86,24 @@ def rle_decompress(np.ndarray values not None):
     dtype = values.dtype
     if np.issubdtype(dtype, np.int8) or np.issubdtype(dtype, np.uint8):
         result = cpc.pcomp_decompress_rle_int8(<np.int8_t *> &output.data[0],
-                                                     num_of_bytes,
-                                                     <np.int8_t *> &values.data[0],
-                                                     values.size)
+                                               num_of_bytes,
+                                               <np.int8_t *> &values.data[0],
+                                               values.size)
     elif np.issubdtype(dtype, np.int16) or np.issubdtype(dtype, np.uint16):
         result = cpc.pcomp_decompress_rle_int16(<np.int16_t *> &output.data[0],
-                                                      num_of_bytes,
-                                                      <np.int16_t *> &values.data[0],
-                                                      values.size)
+                                                num_of_bytes,
+                                                <np.int16_t *> &values.data[0],
+                                                values.size)
     elif np.issubdtype(dtype, np.int32) or np.issubdtype(dtype, np.uint32):
         result = cpc.pcomp_decompress_rle_int32(<np.int32_t *> &output.data[0],
-                                                      num_of_bytes,
-                                                      <np.int32_t *> &values.data[0],
-                                                      values.size)
+                                                num_of_bytes,
+                                                <np.int32_t *> &values.data[0],
+                                                values.size)
     elif np.issubdtype(dtype, np.int64) or np.issubdtype(dtype, np.uint64):
         result = cpc.pcomp_decompress_rle_int64(<np.int64_t *> &output.data[0],
-                                                      num_of_bytes,
-                                                      <np.int64_t *> &values.data[0],
-                                                      values.size)
+                                                num_of_bytes,
+                                                <np.int64_t *> &values.data[0],
+                                                values.size)
     else:
         raise ValueError("invalid type {0} for DIFFRLE decompression"
                          .format(str(values.dtype)))
@@ -126,24 +126,24 @@ def diffrle_compress(np.ndarray values not None):
     dtype = values.dtype
     if np.issubdtype(dtype, np.int8) or np.issubdtype(dtype, np.uint8):
         result = cpc.pcomp_compress_diffrle_int8(<np.int8_t *> &output.data[0],
-                                                   &real_size,
-                                                   <np.int8_t *> &values.data[0],
-                                                   values.size)
+                                                 &real_size,
+                                                 <np.int8_t *> &values.data[0],
+                                                 values.size)
     elif np.issubdtype(dtype, np.int16) or np.issubdtype(dtype, np.uint16):
         result = cpc.pcomp_compress_diffrle_int16(<np.int16_t *> &output.data[0],
-                                                   &real_size,
-                                                   <np.int16_t *> &values.data[0],
-                                                   values.size)
+                                                  &real_size,
+                                                  <np.int16_t *> &values.data[0],
+                                                  values.size)
     elif np.issubdtype(dtype, np.int32) or np.issubdtype(dtype, np.uint32):
         result = cpc.pcomp_compress_diffrle_int32(<np.int32_t *> &output.data[0],
-                                                   &real_size,
-                                                   <np.int32_t *> &values.data[0],
-                                                   values.size)
+                                                  &real_size,
+                                                  <np.int32_t *> &values.data[0],
+                                                  values.size)
     elif np.issubdtype(dtype, np.int64) or np.issubdtype(dtype, np.uint64):
         result = cpc.pcomp_compress_diffrle_int64(<np.int64_t *> &output.data[0],
-                                                   &real_size,
-                                                   <np.int64_t *> &values.data[0],
-                                                   values.size)
+                                                  &real_size,
+                                                  <np.int64_t *> &values.data[0],
+                                                  values.size)
     else:
         raise ValueError('invalid type "{0}" for DIFFRLE compression'
                          .format(str(values.dtype)))
@@ -165,24 +165,24 @@ def diffrle_decompress(np.ndarray values not None):
     dtype = values.dtype
     if np.issubdtype(dtype, np.int8) or np.issubdtype(dtype, np.uint8):
         result = cpc.pcomp_decompress_diffrle_int8(<np.int8_t *> &output.data[0],
-                                                         num_of_bytes,
-                                                         <np.int8_t *> &values.data[0],
-                                                         values.size)
+                                                   num_of_bytes,
+                                                   <np.int8_t *> &values.data[0],
+                                                   values.size)
     elif np.issubdtype(dtype, np.int16) or np.issubdtype(dtype, np.uint16):
         result = cpc.pcomp_decompress_diffrle_int16(<np.int16_t *> &output.data[0],
-                                                          num_of_bytes,
-                                                          <np.int16_t *> &values.data[0],
-                                                          values.size)
+                                                    num_of_bytes,
+                                                    <np.int16_t *> &values.data[0],
+                                                    values.size)
     elif np.issubdtype(dtype, np.int32) or np.issubdtype(dtype, np.uint32):
         result = cpc.pcomp_decompress_diffrle_int32(<np.int32_t *> &output.data[0],
-                                                          num_of_bytes,
-                                                          <np.int32_t *> &values.data[0],
-                                                          values.size)
+                                                    num_of_bytes,
+                                                    <np.int32_t *> &values.data[0],
+                                                    values.size)
     elif np.issubdtype(dtype, np.int64) or np.issubdtype(dtype, np.uint64):
         result = cpc.pcomp_decompress_diffrle_int64(<np.int64_t *> &output.data[0],
-                                                          num_of_bytes,
-                                                          <np.int64_t *> &values.data[0],
-                                                          values.size)
+                                                    num_of_bytes,
+                                                    <np.int64_t *> &values.data[0],
+                                                    values.size)
     else:
         raise ValueError("invalid type {0} for DIFFRLE decompression"
                          .format(str(values.dtype)))
@@ -237,16 +237,16 @@ cdef class QuantParams:
 
         if np.issubdtype(input_values.dtype, np.float32):
             cpc.pcomp_compress_quant_float(<np.float32_t *> &output.data[0],
-                                                 &real_size,
-                                                 <np.float32_t *> &input_values.data[0],
-                                                 input_values.size,
-                                                 self._c_params)
+                                           &real_size,
+                                           <np.float32_t *> &input_values.data[0],
+                                           input_values.size,
+                                           self._c_params)
         elif np.issubdtype(input_values.dtype, np.float64):
             cpc.pcomp_compress_quant_double(<np.float64_t *> &output.data[0],
-                                                  &real_size,
-                                                  <np.float64_t *> &input_values.data[0],
-                                                  input_values.size,
-                                                  self._c_params)
+                                            &real_size,
+                                            <np.float64_t *> &input_values.data[0],
+                                            input_values.size,
+                                            self._c_params)
         else:
             raise ValueError("invalid type {0} for quantization"
                              .format(str(input_values.dtype)))
@@ -270,16 +270,16 @@ cdef class QuantParams:
 
         if output_dtype == np.float32:
             cpc.pcomp_decompress_quant_float(<np.float32_t *> &output.data[0],
-                                                   num_of_samples,
-                                                   <np.int8_t *> &input_values.data[0],
-                                                   len(input_values),
-                                                   self._c_params)
+                                             num_of_samples,
+                                             <np.int8_t *> &input_values.data[0],
+                                             len(input_values),
+                                             self._c_params)
         elif output_dtype == np.float64:
             cpc.pcomp_decompress_quant_double(<np.float64_t *> &output.data[0],
-                                                    num_of_samples,
-                                                    <np.int8_t *> &input_values.data[0],
-                                                    len(input_values),
-                                                    self._c_params)
+                                              num_of_samples,
+                                              <np.int8_t *> &input_values.data[0],
+                                              len(input_values),
+                                              self._c_params)
         else:
             raise ValueError("invalid type size ({0} bytes) for \
 quantized data decompression".format(itemsize))
@@ -309,8 +309,8 @@ cdef class PolyFit:
                                                                 dtype='float64')
         cdef int result
         result = cpc.pcomp_run_poly_fit(self._c_fit,
-                                              <np.float64_t *> &coeffs.data[0],
-                                              <np.float64_t *> &samples.data[0])
+                                        <np.float64_t *> &coeffs.data[0],
+                                        <np.float64_t *> &samples.data[0])
 
         if result != PCOMP_STAT_SUCCESS:
             raise ValueError("pcomp_run_poly_fit returned code {0}"
@@ -344,8 +344,8 @@ cdef class Chebyshev:
             dir = self.direction()
 
         result = cpc.pcomp_run_chebyshev(self._c_cheb, dir,
-                                               <np.float64_t *> &output.data[0],
-                                               <np.float64_t *> &samples.data[0])
+                                         <np.float64_t *> &output.data[0],
+                                         <np.float64_t *> &samples.data[0])
 
         if result != PCOMP_STAT_SUCCESS:
             raise ValueError("pcomp_run_chebyshev returned code {0}"
@@ -374,9 +374,9 @@ cdef class Polycomp:
     def __cinit__(self, num_of_samples, num_of_coeffs,
                   max_allowable_error, algorithm=PCOMP_ALG_USE_CHEBYSHEV):
         self._c_params = cpc.pcomp_init_polycomp(num_of_samples,
-                                                       num_of_coeffs,
-                                                       max_allowable_error,
-                                                       algorithm)
+                                                 num_of_coeffs,
+                                                 max_allowable_error,
+                                                 algorithm)
     cdef cpc.pcomp_polycomp_t* __ptr(Polycomp self):
         return self._c_params
 
@@ -560,6 +560,19 @@ cdef class PolycompChunkArray:
         return cpc.pcomp_chunks_num_of_bytes(self._c_array,
                                              self.num_of_chunks)
 
+    def encode(PolycompChunkArray self):
+        cdef num_of_bytes = self.num_of_bytes()
+        cdef size_t real_size = num_of_bytes
+        cdef np.ndarray[np.int8_t, ndim=1] output = np.empty(num_of_bytes,
+                                                             dtype='int8')
+
+        cpc.pcomp_encode_chunks(<np.int8_t *> &output.data[0],
+                                &real_size,
+                                self._c_array,
+                                self.num_of_chunks)
+
+        return np.resize(output, real_size)
+
     cdef cpc.pcomp_polycomp_chunk_t** __ptr(PolycompChunkArray self):
         return self._c_array
 
@@ -588,26 +601,26 @@ def build_chunk_array(np.ndarray[dtype=np.uint8_t, ndim=1] is_compressed,
                       np.ndarray[dtype=np.float64_t, ndim=1] cheby):
     cdef size_t num_of_chunks = is_compressed.size
     cdef cpc.pcomp_polycomp_chunk_t** ptr = <cpc.pcomp_polycomp_chunk_t**> malloc(sizeof(void *) * num_of_chunks)
-    result = PolycompChunkArray(<libc.stdint.uintptr_t> ptr, num_of_chunks)
-    cdef size_t uncompr_ptr_idx = 0
-    cdef size_t poly_ptr_idx = 0
-    cdef size_t cheby_ptr_idx = 0
+    cdef size_t uncompr_idx = 0
+    cdef size_t poly_idx = 0
+    cdef size_t cheby_idx = 0
 
     for idx in range(num_of_chunks):
         if is_compressed[idx] == 0:
             ptr[idx] = cpc.pcomp_init_uncompressed_chunk(chunk_len[idx],
-                                                         <double *> &uncompr.data[uncompr_ptr_idx])
-            uncompr_ptr_idx += chunk_len[idx]
+                                                         (<double *> &uncompr.data[0]) + uncompr_idx)
+            uncompr_idx += chunk_len[idx]
         else:
             ptr[idx] = cpc.pcomp_init_compressed_chunk(chunk_len[idx],
                                                        poly_size[idx],
-                                                       <double *> &poly.data[poly_ptr_idx],
+                                                       (<double *> &poly.data[0]) + poly_idx,
                                                        cheby_size[idx],
-                                                       <double *> &cheby.data[cheby_ptr_idx])
-            poly_ptr_idx += poly_size[idx]
-            cheby_ptr_idx += cheby_size[idx]
+                                                       (<double *> &cheby.data[0]) + cheby_idx)
 
-    return result
+            poly_idx += poly_size[idx]
+            cheby_idx += cheby_size[idx]
+
+    return PolycompChunkArray(<libc.stdint.uintptr_t> ptr, num_of_chunks)
 
 def decompress_polycomp(PolycompChunkArray array):
     cdef size_t num_of_samples = array.total_num_of_samples()
@@ -615,9 +628,22 @@ def decompress_polycomp(PolycompChunkArray array):
     cdef int result
 
     result = cpc.pcomp_decompress_polycomp(<np.float64_t *> &samples.data[0],
-                                                 array.__ptr(), len(array))
+                                           array.__ptr(), len(array))
     if result != PCOMP_STAT_SUCCESS:
         raise ValueError("pcomp_decompress_polycomp returned code {0}"
                          .format(result))
 
     return samples
+
+def decode_chunk_array(np.ndarray raw_bytes not None):
+    cdef cpc.pcomp_polycomp_chunk_t** chunk_array
+    cdef size_t num_of_chunks
+    cdef int result
+
+    result = cpc.pcomp_decode_chunks(&chunk_array, &num_of_chunks,
+                                     <np.int8_t *> &raw_bytes.data[0])
+    if result != PCOMP_STAT_SUCCESS:
+        raise ValueError("pcomp_decode_chunks returned code {0}"
+                         .format(result))
+
+    return PolycompChunkArray(<libc.stdint.uintptr_t> chunk_array, num_of_chunks)
