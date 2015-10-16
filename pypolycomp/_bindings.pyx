@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- mode: cython -*-
 
+from libc.stdint cimport *
 cimport cpolycomp as cpc
 from cpython cimport array
 cimport libc.stdint
@@ -429,12 +430,14 @@ cdef class PolycompChunk:
     def init_compressed(self,
                         num_of_samples,
                         np.ndarray[dtype=np.float64_t, ndim=1] poly not None,
+                        np.ndarray[dtype=np.uint8_t, ndim=1] cheby_mask not None,
                         np.ndarray[dtype=np.float64_t, ndim=1] cheby not None):
 
         self._c_chunk = cpc.pcomp_init_compressed_chunk(num_of_samples,
                                                         poly.size,
                                                         <np.float64_t *> &poly.data[0],
                                                         cheby.size,
+                                                        <np.uint8_t *> &cheby_mask.data[0],
                                                         <np.float64_t *> &cheby.data[0])
         self.free_flag = 1
 
@@ -487,6 +490,12 @@ cdef class PolycompChunk:
     def num_of_cheby_coeffs(self):
         return cpc.pcomp_chunk_num_of_cheby_coeffs(self._c_chunk)
 
+    def cheby_mask_size(self, chunk_size=None):
+        if chunk_size is None:
+            return cpc.pcomp_chunk_cheby_mask_size(self.num_of_samples())
+        else:
+            return cpc.pcomp_chunk_cheby_mask_size(chunk_size)
+
     def cheby_coeffs(self):
         if self.num_of_cheby_coeffs() == 0:
             return np.array([])
@@ -494,6 +503,20 @@ cdef class PolycompChunk:
         cdef size_t num = self.num_of_cheby_coeffs()
         cdef const double* ptr = cpc.pcomp_chunk_cheby_coeffs(self._c_chunk)
         cdef np.ndarray[np.float64_t, ndim=1] result = np.empty(num)
+        cdef size_t i
+
+        for i in range(num):
+            result[i] = ptr[i]
+
+        return result
+
+    def cheby_mask(self):
+        if self.num_of_cheby_coeffs() == 0:
+            return np.array([])
+
+        cdef size_t num = self.cheby_mask_size()
+        cdef const uint8_t* ptr = cpc.pcomp_chunk_cheby_mask(self._c_chunk)
+        cdef np.ndarray[np.uint8_t, ndim=1] result = np.empty(num)
         cdef size_t i
 
         for i in range(num):
@@ -598,11 +621,13 @@ def build_chunk_array(np.ndarray[dtype=np.uint8_t, ndim=1] is_compressed,
                       np.ndarray[dtype=np.uint8_t, ndim=1] poly_size,
                       np.ndarray[dtype=np.float64_t, ndim=1] poly,
                       np.ndarray[dtype=np.uint16_t, ndim=1] cheby_size,
+                      np.ndarray[dtype=np.uint8_t, ndim=1] cheby_mask,
                       np.ndarray[dtype=np.float64_t, ndim=1] cheby):
     cdef size_t num_of_chunks = is_compressed.size
     cdef cpc.pcomp_polycomp_chunk_t** ptr = <cpc.pcomp_polycomp_chunk_t**> malloc(sizeof(void *) * num_of_chunks)
     cdef size_t uncompr_idx = 0
     cdef size_t poly_idx = 0
+    cdef size_t cheby_mask_idx = 0
     cdef size_t cheby_idx = 0
 
     for idx in range(num_of_chunks):
@@ -615,9 +640,11 @@ def build_chunk_array(np.ndarray[dtype=np.uint8_t, ndim=1] is_compressed,
                                                        poly_size[idx],
                                                        (<double *> &poly.data[0]) + poly_idx,
                                                        cheby_size[idx],
+                                                       (<uint8_t *> &cheby_mask.data[0]) + cheby_mask_idx,
                                                        (<double *> &cheby.data[0]) + cheby_idx)
 
             poly_idx += poly_size[idx]
+            cheby_mask_idx += cpc.pcomp_chunk_cheby_mask_size(chunk_len[idx])
             cheby_idx += cheby_size[idx]
 
     return PolycompChunkArray(<libc.stdint.uintptr_t> ptr, num_of_chunks)
