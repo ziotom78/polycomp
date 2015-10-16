@@ -4,6 +4,10 @@
 from libc.stdint cimport *
 
 cdef extern from "libpolycomp.h":
+
+    ctypedef size_t pcomp_chunk_size_t;
+    ctypedef size_t pcomp_poly_size_t;
+
     void pcomp_version(int* major, int* minor)
 
     # RLE
@@ -211,41 +215,41 @@ cdef extern from "libpolycomp.h":
     ctypedef struct pcomp_polycomp_chunk_t:
         pass
 
-    pcomp_polycomp_chunk_t* pcomp_init_chunk(size_t num_of_samples);
-    pcomp_polycomp_chunk_t* pcomp_init_uncompressed_chunk(size_t num_of_samples,
+    pcomp_polycomp_chunk_t* pcomp_init_chunk(pcomp_chunk_size_t num_of_samples);
+    pcomp_polycomp_chunk_t* pcomp_init_uncompressed_chunk(pcomp_chunk_size_t num_of_samples,
                                                           double* samples);
-    pcomp_polycomp_chunk_t* pcomp_init_compressed_chunk(size_t num_of_samples,
-                                                        size_t num_of_poly_coeffs,
+    pcomp_polycomp_chunk_t* pcomp_init_compressed_chunk(pcomp_chunk_size_t num_of_samples,
+                                                        pcomp_poly_size_t num_of_poly_coeffs,
                                                         const double* poly_coeffs,
-                                                        size_t num_of_cheby_coeffs,
+                                                        pcomp_chunk_size_t num_of_cheby_coeffs,
                                                         const double* cheby_coeffs)
     void pcomp_free_chunk(pcomp_polycomp_chunk_t* chunk);
 
-    size_t pcomp_chunk_num_of_samples(pcomp_polycomp_chunk_t* chunk)
+    pcomp_chunk_size_t pcomp_chunk_num_of_samples(pcomp_polycomp_chunk_t* chunk)
     size_t pcomp_chunk_num_of_bytes(pcomp_polycomp_chunk_t* chunk)
     int pcomp_chunk_is_compressed(pcomp_polycomp_chunk_t* chunk)
     const double* pcomp_chunk_uncompressed_data(pcomp_polycomp_chunk_t* chunk)
-    size_t pcomp_chunk_num_of_poly_coeffs(pcomp_polycomp_chunk_t* chunk)
+    pcomp_poly_size_t pcomp_chunk_num_of_poly_coeffs(pcomp_polycomp_chunk_t* chunk)
     const double* pcomp_chunk_poly_coeffs(pcomp_polycomp_chunk_t* chunk)
-    size_t pcomp_chunk_num_of_cheby_coeffs(pcomp_polycomp_chunk_t* chunk)
+    pcomp_chunk_size_t pcomp_chunk_num_of_cheby_coeffs(pcomp_polycomp_chunk_t* chunk)
     const double* pcomp_chunk_cheby_coeffs(pcomp_polycomp_chunk_t* chunk)
 
     void pcomp_straighten(double* output, double* input,
                           size_t num_of_samples, double period)
 
-    pcomp_polycomp_t* pcomp_init_polycomp(size_t num_of_samples, size_t num_of_coeffs,
+    pcomp_polycomp_t* pcomp_init_polycomp(pcomp_chunk_size_t num_of_samples, pcomp_poly_size_t num_of_coeffs,
                                           double max_allowable_error,
                                           int algorithm)
     void pcomp_free_polycomp(pcomp_polycomp_t* params)
-    size_t pcomp_polycomp_samples_per_chunk(pcomp_polycomp_t* params)
-    size_t pcomp_polycomp_num_of_poly_coeffs(
+    pcomp_chunk_size_t pcomp_polycomp_samples_per_chunk(pcomp_polycomp_t* params)
+    pcomp_poly_size_t pcomp_polycomp_num_of_poly_coeffs(
         pcomp_polycomp_t* params)
     double pcomp_polycomp_max_error(pcomp_polycomp_t* params)
     int pcomp_polycomp_algorithm(pcomp_polycomp_t* params)
 
     int pcomp_run_polycomp_on_chunk(pcomp_polycomp_t* params,
                                     double* input,
-                                    size_t num_of_samples,
+                                    pcomp_chunk_size_t num_of_samples,
                                     pcomp_polycomp_chunk_t* chunk,
                                     double* max_error)
 

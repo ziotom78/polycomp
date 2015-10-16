@@ -307,7 +307,7 @@ def polycomp_chunks_to_FITS_table_debug(chunks, params):
 
     hdu = pyfits.BinTableHDU.from_columns([
         pyfits.Column(name='ISCOMPR', format='1L', array=is_compressed),
-        pyfits.Column(name='CKLEN', format='1K', array=chunk_length),
+        pyfits.Column(name='CKLEN', format='1I', array=chunk_length),
         pyfits.Column(name='UNCOMPR', format='PD()', array=uncompressed),
         pyfits.Column(name='POLY', format='PD()', array=poly_coeffs),
         pyfits.Column(name='CHEBY', format='PD()', array=cheby_coeffs)])
@@ -696,9 +696,9 @@ def decompress_poly_debug(hdu):
                                                       for x in (0, 1, 2, 3, 4)]
     num_of_chunks = is_compressed.size
     poly_size = np.array([poly[idx].size for idx in range(num_of_chunks)],
-                         dtype=np.uint64)
+                         dtype=np.uint8)
     cheby_size = np.array([cheby[idx].size for idx in range(num_of_chunks)],
-                         dtype=np.uint64)
+                          dtype=np.uint16)
     chunk_array = ppc.build_chunk_array(is_compressed=is_compressed.astype(np.uint8),
                                         chunk_len=chunk_len.astype(np.uint64),
                                         uncompr=np.concatenate(uncompr),
@@ -706,9 +706,7 @@ def decompress_poly_debug(hdu):
                                         poly=np.concatenate(poly),
                                         cheby_size=cheby_size,
                                         cheby=np.concatenate(cheby))
-    for idx in range(0, 2):
-        log.debug('%d) first poly coeff: %f (it should have been %f)',
-                  idx + 1, chunk_array[idx].poly_coeffs()[0], poly[idx][0])
+
     return ppc.decompress_polycomp(chunk_array), 'D'
 
 ########################################################################

@@ -593,11 +593,11 @@ def compress_polycomp(np.ndarray[np.float64_t, ndim=1] samples not None,
     return PolycompChunkArray(<libc.stdint.uintptr_t> chunk_array, num_of_chunks)
 
 def build_chunk_array(np.ndarray[dtype=np.uint8_t, ndim=1] is_compressed,
-                      np.ndarray[dtype=np.uint64_t, ndim=1] chunk_len,
+                      np.ndarray[dtype=np.uint16_t, ndim=1] chunk_len,
                       np.ndarray[dtype=np.float64_t, ndim=1] uncompr,
-                      np.ndarray[dtype=np.uint64_t, ndim=1] poly_size,
+                      np.ndarray[dtype=np.uint8_t, ndim=1] poly_size,
                       np.ndarray[dtype=np.float64_t, ndim=1] poly,
-                      np.ndarray[dtype=np.uint64_t, ndim=1] cheby_size,
+                      np.ndarray[dtype=np.uint16_t, ndim=1] cheby_size,
                       np.ndarray[dtype=np.float64_t, ndim=1] cheby):
     cdef size_t num_of_chunks = is_compressed.size
     cdef cpc.pcomp_polycomp_chunk_t** ptr = <cpc.pcomp_polycomp_chunk_t**> malloc(sizeof(void *) * num_of_chunks)
