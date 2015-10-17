@@ -387,6 +387,11 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
     if not parser.getboolean(table, 'use_chebyshev'):
         algorithm = ppc.PCOMP_ALG_NO_CHEBYSHEV
 
+    if parser.has_option(table, 'period'):
+        period = parser.getfloat(table, 'period')
+    else:
+        period = None
+
     explore_param_space = (len(num_of_coefficients_space) > 1) or \
                           (len(samples_per_chunk_space) > 1)
 
@@ -397,6 +402,9 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                               num_of_coeffs=num_of_coeffs,
                               max_allowable_error=max_error,
                               algorithm=algorithm)
+        if period is not None:
+            params.set_period(period)
+
         chunks = ppc.compress_polycomp(samples, params)
 
         if debug:

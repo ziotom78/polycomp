@@ -396,6 +396,12 @@ cdef class Polycomp:
     def algorithm(Polycomp self):
         return cpc.pcomp_polycomp_algorithm(self._c_params)
 
+    def period(Polycomp self):
+        return cpc.pcomp_polycomp_period(self._c_params)
+
+    def set_period(Polycomp self, double period):
+        cpc.pcomp_polycomp_set_period(self._c_params, period)
+
 cdef extern from "stdlib.h":
     void free(void *) nogil
 

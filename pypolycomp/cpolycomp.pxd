@@ -251,6 +251,9 @@ cdef extern from "libpolycomp.h":
         pcomp_polycomp_t* params)
     double pcomp_polycomp_max_error(pcomp_polycomp_t* params)
     int pcomp_polycomp_algorithm(pcomp_polycomp_t* params)
+    double pcomp_polycomp_period(pcomp_polycomp_t* params)
+
+    void pcomp_polycomp_set_period(pcomp_polycomp_t* params, double period)
 
     int pcomp_run_polycomp_on_chunk(pcomp_polycomp_t* params,
                                     double* input,
