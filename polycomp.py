@@ -295,6 +295,7 @@ def polycomp_chunks_to_FITS_table_debug(chunks, params):
     chunk_length = np.empty(len(chunks), dtype='uint64')
     uncompressed = np.empty(len(chunks), dtype=np.object)
     poly_coeffs = np.empty(len(chunks), dtype=np.object)
+    cheby_mask = np.empty(len(chunks), dtype=np.object)
     cheby_coeffs = np.empty(len(chunks), dtype=np.object)
 
     for chunk_idx in range(len(chunks)):
@@ -303,6 +304,7 @@ def polycomp_chunks_to_FITS_table_debug(chunks, params):
         chunk_length[chunk_idx] = cur_chunk.num_of_samples()
         uncompressed[chunk_idx] = cur_chunk.uncompressed_samples()
         poly_coeffs[chunk_idx] = cur_chunk.poly_coeffs()
+        cheby_mask[chunk_idx] = cur_chunk.cheby_mask()
         cheby_coeffs[chunk_idx] = cur_chunk.cheby_coeffs()
 
     hdu = pyfits.BinTableHDU.from_columns([
@@ -310,6 +312,7 @@ def polycomp_chunks_to_FITS_table_debug(chunks, params):
         pyfits.Column(name='CKLEN', format='1I', array=chunk_length),
         pyfits.Column(name='UNCOMPR', format='PD()', array=uncompressed),
         pyfits.Column(name='POLY', format='PD()', array=poly_coeffs),
+        pyfits.Column(name='CHMASK', format='PB()', array=cheby_mask),
         pyfits.Column(name='CHEBY', format='PD()', array=cheby_coeffs)])
 
     hdu.header['PCNPOLY'] = (params.num_of_poly_coeffs(),
@@ -685,26 +688,30 @@ def decompress_quant(hdu):
 def decompress_poly_debug(hdu):
     "Decompress an HDU containing polynomial compressed data in debug form"
 
-    if hdu.columns.names != ['ISCOMPR', 'CKLEN', 'UNCOMPR', 'POLY', 'CHEBY']:
+    if hdu.columns.names != ['ISCOMPR', 'CKLEN', 'UNCOMPR',
+                             'POLY', 'CHMASK', 'CHEBY']:
         raise ValueError('unknown sequence of columns for polynomial '
                          'compression: %s',
                          str(hdu.columns.names))
 
     inv_cheby = None
     samples = np.empty(0, dtype='float64')
-    is_compressed, chunk_len, uncompr, poly, cheby = [hdu.data.field(x)
-                                                      for x in (0, 1, 2, 3, 4)]
+    is_compressed, chunk_len, uncompr, \
+        poly, cheby_mask, cheby = [hdu.data.field(x)
+                                   for x in range(6)]
+
     num_of_chunks = is_compressed.size
     poly_size = np.array([poly[idx].size for idx in range(num_of_chunks)],
                          dtype=np.uint8)
     cheby_size = np.array([cheby[idx].size for idx in range(num_of_chunks)],
                           dtype=np.uint16)
     chunk_array = ppc.build_chunk_array(is_compressed=is_compressed.astype(np.uint8),
-                                        chunk_len=chunk_len.astype(np.uint64),
+                                        chunk_len=chunk_len.astype(np.uint16),
                                         uncompr=np.concatenate(uncompr),
                                         poly_size=poly_size,
                                         poly=np.concatenate(poly),
                                         cheby_size=cheby_size,
+                                        cheby_mask=np.concatenate(cheby_mask),
                                         cheby=np.concatenate(cheby))
 
     return ppc.decompress_polycomp(chunk_array), 'D'

@@ -516,7 +516,7 @@ cdef class PolycompChunk:
 
         cdef size_t num = self.cheby_mask_size()
         cdef const uint8_t* ptr = cpc.pcomp_chunk_cheby_mask(self._c_chunk)
-        cdef np.ndarray[np.uint8_t, ndim=1] result = np.empty(num)
+        cdef np.ndarray[np.uint8_t, ndim=1] result = np.empty(num, dtype=np.uint8)
         cdef size_t i
 
         for i in range(num):
@@ -624,7 +624,8 @@ def build_chunk_array(np.ndarray[dtype=np.uint8_t, ndim=1] is_compressed,
                       np.ndarray[dtype=np.uint8_t, ndim=1] cheby_mask,
                       np.ndarray[dtype=np.float64_t, ndim=1] cheby):
     cdef size_t num_of_chunks = is_compressed.size
-    cdef cpc.pcomp_polycomp_chunk_t** ptr = <cpc.pcomp_polycomp_chunk_t**> malloc(sizeof(void *) * num_of_chunks)
+    cdef cpc.pcomp_polycomp_chunk_t** ptr = \
+        <cpc.pcomp_polycomp_chunk_t**> malloc(sizeof(void *) * num_of_chunks)
     cdef size_t uncompr_idx = 0
     cdef size_t poly_idx = 0
     cdef size_t cheby_mask_idx = 0
@@ -633,19 +634,20 @@ def build_chunk_array(np.ndarray[dtype=np.uint8_t, ndim=1] is_compressed,
     for idx in range(num_of_chunks):
         if is_compressed[idx] == 0:
             ptr[idx] = cpc.pcomp_init_uncompressed_chunk(chunk_len[idx],
-                                                         (<double *> &uncompr.data[0]) + uncompr_idx)
+                (<double *> &uncompr.data[0]) + uncompr_idx)
             uncompr_idx += chunk_len[idx]
         else:
             ptr[idx] = cpc.pcomp_init_compressed_chunk(chunk_len[idx],
-                                                       poly_size[idx],
-                                                       (<double *> &poly.data[0]) + poly_idx,
-                                                       cheby_size[idx],
-                                                       (<uint8_t *> &cheby_mask.data[0]) + cheby_mask_idx,
-                                                       (<double *> &cheby.data[0]) + cheby_idx)
+                poly_size[idx],
+                (<double *> &poly.data[0]) + poly_idx,
+                cheby_size[idx],
+                (<uint8_t *> &cheby_mask.data[0]) + cheby_mask_idx,
+                (<double *> &cheby.data[0]) + cheby_idx)
 
             poly_idx += poly_size[idx]
-            cheby_mask_idx += cpc.pcomp_chunk_cheby_mask_size(chunk_len[idx])
             cheby_idx += cheby_size[idx]
+            if cheby_size[idx] > 0:
+                cheby_mask_idx += cpc.pcomp_chunk_cheby_mask_size(chunk_len[idx])
 
     return PolycompChunkArray(<libc.stdint.uintptr_t> ptr, num_of_chunks)
 
