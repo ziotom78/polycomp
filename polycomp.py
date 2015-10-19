@@ -5,7 +5,7 @@
 algorithms.
 
 Usage:
-    polycomp compress [--tables=LIST] [--save-opt] [--debug] <schema_file> <output_file> [<key=value>...]
+    polycomp compress [--tables=LIST] [--debug] <schema_file> <output_file> [<key=value>...]
     polycomp decompress [--output=FILE] [--tables=LIST] [--one-hdu] <input_file>
     polycomp (-h | --help)
     polycomp --version
@@ -18,13 +18,11 @@ Options:
     --version               Print the version number of the executable
     --debug                 When saving data compressed using the polynomial
                             compression, use an extended format that is easier
-                            to debug. This wastes some space (typically less than 10%).
+                            to debug. This wastes some space (typically less than 10%). Moreover, if a
     -o FILE, --output=FILE  Specify the name of the output file
     --one-hdu               Save all the data in columns of the same HDU.
                             This only works if all the tables in <input_file>
                             have the same number of elements when decompressed.
-    --save-opt              Save every result of polynomial parameter optimization
-                            into separate FITS files.
     -t LIST, --tables=LIST  Comma-separated list of tables to be (de)compressed.
                             If this flag is not provided, all tables will be
                             processed.
@@ -32,6 +30,7 @@ Options:
 
 from docopt import docopt
 from collections import namedtuple
+from datetime import datetime
 import itertools
 import os.path
 import sys
@@ -369,7 +368,55 @@ def polycomp_chunks_to_FITS_table(chunks, params):
 ########################################################################
 
 ParameterPoint = namedtuple('ParameterPoint',
-                            ['hdu', 'hdu_data_size', 'chunks', 'params'])
+                            ['hdu', 'compr_data_size', 'chunks', 'params'])
+
+def save_polycomp_parameter_space(errors_in_param_space,
+                                  uncompressed_size,
+                                  table_name):
+    """Save the table used for the optimization of the polycomp parameters
+
+    Save the points in the parameter space that have been sampled for
+    the optimization of the polynomial compression in a FITS file. The
+    value "uncompressed_size" is the size in bytes of the uncompressed
+    data, and it is used to compute the compression ratios.
+
+    Return the name of the FITS file that has been created by the function."""
+
+    hdu_table = pyfits.BinTableHDU.from_columns([
+        pyfits.Column(name='CHUNKLEN', format='1I',
+                      array=[x.params.samples_per_chunk()
+                             for x in errors_in_param_space]),
+        pyfits.Column(name='POLYCOEFS', format='1B',
+                      array=[x.params.num_of_poly_coeffs()
+                             for x in errors_in_param_space]),
+        pyfits.Column(name='COMPRSIZ', format='1J',
+                      array=[x.compr_data_size
+                             for x in errors_in_param_space]),
+        pyfits.Column(name='CR', format='1E',
+                      array=[float(uncompressed_size) / x.compr_data_size
+                             for x in errors_in_param_space]),
+        pyfits.Column(name='MAXERR', format='1D',
+                      array=[x.params.max_error()
+                             for x in errors_in_param_space]),
+        pyfits.Column(name='USECHEBY', format='1L',
+                      array=[x.params.algorithm() != ppc.PCOMP_ALG_NO_CHEBYSHEV
+                             for x in errors_in_param_space])
+        ])
+
+    date = datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S")
+    file_name = ('optimization_{table_name}_{date}.fits'
+                 .format(table_name=table_name,
+                         date=date))
+    log.info('writing optimization information in file %s',
+             os.path.abspath(file_name))
+
+    hdu_table.header['EXTNAME'] = table_name
+    hdu_table.header['UNCSIZE'] = (uncompressed_size,
+                                   'Size (in bytes) of the uncompressed data')
+
+    hdu_table.writeto(file_name)
+
+    return file_name
 
 def compress_and_encode_poly(parser, table, samples_format, samples, debug):
     """Save "samples" in a binary table (polynomial compression)
@@ -395,6 +442,7 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
     explore_param_space = (len(num_of_coefficients_space) > 1) or \
                           (len(samples_per_chunk_space) > 1)
 
+    # Loop over the set of parameters to find the best one
     errors_in_param_space = []
     for num_of_coeffs, samples_per_chunk in itertools.product(num_of_coefficients_space,
                                                               samples_per_chunk_space):
@@ -412,24 +460,24 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
         else:
             cur_hdu = polycomp_chunks_to_FITS_table(chunks, params)
 
-        # Use the size of the data part as figure of merit. This is
-        # calculated as the number of bytes required for the whole HDU
-        # minus the size of the header
-        cur_num_of_bytes = cur_hdu.filebytes() - len(str(cur_hdu.header))
-        cur_point = ParameterPoint(hdu_data_size=cur_num_of_bytes,
+        chunk_bytes = chunks.num_of_bytes()
+        cur_point = ParameterPoint(compr_data_size=chunk_bytes,
                                    hdu=cur_hdu,
                                    chunks=chunks,
                                    params=params)
         errors_in_param_space.append(cur_point)
 
         if explore_param_space:
-            chunk_bytes = chunks.num_of_bytes()
+            # Use the size of the data part as figure of merit. This is
+            # calculated as the number of bytes required for the whole HDU
+            # minus the size of the header
+            cur_num_of_bytes = cur_hdu.filebytes() - len(str(cur_hdu.header))
             log.info('  configuration with num_of_coefficients=%d, '
-                     'samples_per_chunk=%d requires %d bytes (raw '
-                     'data would have required %d, the increment is %.2f%%)',
+                     'samples_per_chunk=%d requires %d bytes (the FITS '
+                     'file takes %d bytes, the increment is %.2f%%)',
                      num_of_coeffs, samples_per_chunk,
-                     cur_num_of_bytes,
                      chunk_bytes,
+                     cur_num_of_bytes,
                      (cur_num_of_bytes - chunk_bytes) * 100.0 / chunk_bytes)
 
     if len(errors_in_param_space) == 0:
@@ -437,7 +485,15 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                   table)
         sys.exit(1)
 
-    errors_in_param_space.sort(key=lambda x: x.hdu_data_size)
+    optimization_file_name = None
+    if debug and explore_param_space:
+        uncompr_size = samples.size * samples.itemsize
+        optimization_file_name = \
+            save_polycomp_parameter_space(errors_in_param_space,
+                                          uncompressed_size=uncompr_size,
+                                          table_name=table)
+
+    errors_in_param_space.sort(key=lambda x: x.compr_data_size)
     best_configuration = errors_in_param_space[0]
     if explore_param_space:
         log.info('the best compression parameters for "%s" are '
@@ -445,9 +501,13 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                  table,
                  best_configuration.params.num_of_poly_coeffs(),
                  best_configuration.params.samples_per_chunk(),
-                 best_configuration.hdu_data_size)
+                 best_configuration.compr_data_size)
 
-    return (best_configuration.hdu, best_configuration.hdu_data_size)
+    if optimization_file_name is not None:
+        best_configuration.hdu.header['OPTIMFN'] = (optimization_file_name,
+                                                    'Path to the file with optimization '
+                                                    'infos')
+    return (best_configuration.hdu, best_configuration.compr_data_size)
 
 ########################################################################
 
