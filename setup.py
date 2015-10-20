@@ -17,9 +17,9 @@ else:
 
 
 if use_cython:
-    cython_ext = '.c'
-else:
     cython_ext = '.pyx'
+else:
+    cython_ext = '.c'
 
 modules = [Extension("pypolycomp._bindings",
                      sources=["pypolycomp/_bindings" + cython_ext],
