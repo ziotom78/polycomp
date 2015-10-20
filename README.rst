@@ -11,8 +11,12 @@ Requirements
 ------------
 
 1. Either Python 2.7 or 3.4 will work
-   
+
 2. libpolycomp must already be installed
+
+3. The following Python libraries are required:
+   - `docopt`;
+   - `pyfits`.
 
 Basic usage
 -----------

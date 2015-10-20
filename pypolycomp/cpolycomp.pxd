@@ -5,8 +5,8 @@ from libc.stdint cimport *
 
 cdef extern from "libpolycomp.h":
 
-    ctypedef size_t pcomp_chunk_size_t;
-    ctypedef size_t pcomp_poly_size_t;
+    ctypedef size_t pcomp_chunk_size_t
+    ctypedef size_t pcomp_poly_size_t
 
     void pcomp_version(int* major, int* minor)
 

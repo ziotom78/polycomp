@@ -3,18 +3,37 @@
 
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
-from Cython.Build import cythonize
 import os.path as path
+from distutils.version import StrictVersion
+
+try:
+    from Cython.Build import cythonize
+    from Cython.Distutils import build_ext
+    from Cython import __version__ as cython_version
+except ImportError:
+    use_cython = False
+else:
+    use_cython = StrictVersion(cython_version) >= StrictVersion('0.18.0')
+
+
+if use_cython:
+    cython_ext = '.c'
+else:
+    cython_ext = '.pyx'
 
 modules = [Extension("pypolycomp._bindings",
-                     sources=["pypolycomp/_bindings.pyx"],
+                     sources=["pypolycomp/_bindings" + cython_ext],
                      libraries=["polycomp"])]
+
 
 here = path.abspath(path.dirname(__file__))
 
 # Get the long description from the README file
 with open(path.join(here, 'README.rst')) as f:
     long_description = f.read()
+
+if use_cython:
+    modules = cythonize(modules)
 
 setup(name="polycomp",
       version="1.0",
@@ -24,8 +43,8 @@ setup(name="polycomp",
       long_description=long_description,
       license="MIT",
       url="",
-      install_requires=["cython", "pyfits", "docopt"],
-      ext_modules=cythonize(modules),
+      install_requires=["cython >= 0.18", "pyfits", "docopt"],
+      ext_modules=modules,
       scripts=['polycomp'],
       packages=['pypolycomp'],
       keywords='compression astronomy fits',

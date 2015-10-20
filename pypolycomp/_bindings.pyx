@@ -406,7 +406,7 @@ cdef extern from "stdlib.h":
     void free(void *) nogil
 
 cdef class PolycompChunk:
-    cdef cpc.pcomp_polycomp_chunk_t* _c_chunk;
+    cdef cpc.pcomp_polycomp_chunk_t* _c_chunk
     cdef int free_flag
 
     def __cinit__(PolycompChunk self):
