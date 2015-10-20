@@ -1,2 +1,3 @@
 include README.rst
+include example.conf
 include pypolycomp/_bindings.c
