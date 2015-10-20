@@ -368,7 +368,11 @@ def polycomp_chunks_to_FITS_table(chunks, params):
 ########################################################################
 
 ParameterPoint = namedtuple('ParameterPoint',
-                            ['hdu', 'compr_data_size', 'chunks', 'params'])
+                            ['hdu',
+                             'compr_data_size',
+                             'chunks',
+                             'params',
+                             'elapsed_time'])
 
 def save_polycomp_parameter_space(errors_in_param_space,
                                   uncompressed_size,
@@ -395,8 +399,20 @@ def save_polycomp_parameter_space(errors_in_param_space,
         pyfits.Column(name='CR', format='1E',
                       array=[float(uncompressed_size) / x.compr_data_size
                              for x in errors_in_param_space]),
+        pyfits.Column(name='NCK', format='1J',
+                      array=[len(x.chunks)
+                             for x in errors_in_param_space]),
+        pyfits.Column(name='NCOMPCK', format='1J',
+                      array=[x.chunks.num_of_compressed_chunks()
+                             for x in errors_in_param_space]),
+        pyfits.Column(name='NCHEBYC', format='1J',
+                      array=[x.chunks.total_num_of_cheby_coeffs()
+                             for x in errors_in_param_space]),
         pyfits.Column(name='MAXERR', format='1D',
                       array=[x.params.max_error()
+                             for x in errors_in_param_space]),
+        pyfits.Column(name='TIME', format='1E',
+                      array=[x.elapsed_time
                              for x in errors_in_param_space]),
         pyfits.Column(name='USECHEBY', format='1L',
                       array=[x.params.algorithm() != ppc.PCOMP_ALG_NO_CHEBYSHEV
@@ -455,16 +471,19 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
 
         chunks = ppc.compress_polycomp(samples, params)
 
+        start_time = time.clock()
         if debug:
             cur_hdu = polycomp_chunks_to_FITS_table_debug(chunks, params)
         else:
             cur_hdu = polycomp_chunks_to_FITS_table(chunks, params)
+        end_time = time.clock()
 
         chunk_bytes = chunks.num_of_bytes()
         cur_point = ParameterPoint(compr_data_size=chunk_bytes,
                                    hdu=cur_hdu,
                                    chunks=chunks,
-                                   params=params)
+                                   params=params,
+                                   elapsed_time=end_time - start_time)
         errors_in_param_space.append(cur_point)
 
         if explore_param_space:

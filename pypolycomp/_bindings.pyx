@@ -589,6 +589,19 @@ cdef class PolycompChunkArray:
         return cpc.pcomp_chunks_num_of_bytes(self._c_array,
                                              self.num_of_chunks)
 
+    def num_of_compressed_chunks(PolycompChunkArray self):
+        result = 0
+        for idx in range(len(self)):
+            if self[idx].is_compressed():
+                result += 1
+        return result
+
+    def total_num_of_cheby_coeffs(PolycompChunkArray self):
+        result = 0
+        for idx in range(len(self)):
+            result += self[idx].num_of_cheby_coeffs()
+        return result
+
     def encode(PolycompChunkArray self):
         cdef num_of_bytes = self.num_of_bytes()
         cdef size_t real_size = num_of_bytes
