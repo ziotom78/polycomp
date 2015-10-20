@@ -45,7 +45,7 @@ setup(name="polycomp",
       url="",
       install_requires=["cython >= 0.18", "pyfits", "docopt"],
       ext_modules=modules,
-      scripts=['polycomp'],
+      scripts=['polycomp.py'],
       packages=['pypolycomp'],
       keywords='compression astronomy fits',
       classifiers=[
