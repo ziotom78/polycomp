@@ -391,13 +391,16 @@ ParameterPoint = namedtuple('ParameterPoint',
                              'num_of_compr_chunks',
                              'num_of_poly_coeffs',
                              'num_of_cheby_coeffs',
+                             'cr',
                              'max_error',
                              'algorithm',
                              'elapsed_time'])
 
 def save_polycomp_parameter_space(errors_in_param_space,
                                   uncompressed_size,
-                                  table_name):
+                                  table_name,
+                                  num_of_coefficients,
+                                  samples_per_chunk):
     """Save the table used for the optimization of the polycomp parameters
 
     Save the points in the parameter space that have been sampled for
@@ -405,40 +408,37 @@ def save_polycomp_parameter_space(errors_in_param_space,
     value "uncompressed_size" is the size in bytes of the uncompressed
     data, and it is used to compute the compression ratios.
 
+    The variables "num_of_coefficients" and "samples_per_chunk" are
+    used to build the image HDUs.
+
     Return the name of the FITS file that has been created by the function."""
 
-    hdu_table = pyfits.BinTableHDU.from_columns([
-        pyfits.Column(name='CHUNKLEN', format='1I',
-                      array=[x.samples_per_chunk
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='COMPRSIZ', format='1J',
-                      array=[x.compr_data_size
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='CR', format='1E',
-                      array=[float(uncompressed_size) / x.compr_data_size
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='NCK', format='1J',
-                      array=[x.num_of_chunks
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='NCOMPCK', format='1J',
-                      array=[x.num_of_compr_chunks
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='POLYCOEFS', format='1B',
-                      array=[x.num_of_poly_coeffs
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='NCHEBYC', format='1J',
-                      array=[x.num_of_cheby_coeffs
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='MAXERR', format='1D',
-                      array=[x.max_error
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='USECHEBY', format='1L',
-                      array=[x.algorithm != ppc.PCOMP_ALG_NO_CHEBYSHEV
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='TIME', format='1E',
-                      array=[x.elapsed_time
-                             for x in errors_in_param_space])
-        ])
+    # Build the matrices
+    mat_samples_per_chunk, mat_num_of_coeffs = np.meshgrid(samples_per_chunk,
+                                                           num_of_coefficients)
+
+    hdu_list = [pyfits.PrimaryHDU(),
+                pyfits.ImageHDU(name='SMPPERCK',
+                                data=mat_samples_per_chunk),
+                pyfits.ImageHDU(name='NUMCOEFS',
+                                data=mat_num_of_coeffs)]
+    hdu_list[0].header['TBLNAME'] = (table_name,
+                                     'The parameter that has been compressed')
+    hdu_list[0].header['UNCSIZE'] = (uncompressed_size,
+                                     'Size of the uncompressed data [bytes]')
+
+    for (vector, hdu_name, fmt) in [('compr_data_size', 'COMPRSIZ', 'J'),
+                                    ('cr', 'CR', 'E'),
+                                    ('num_of_chunks', 'NUMCK', 'J'),
+                                    ('num_of_compr_chunks', 'NUMCRCK', 'J'),
+                                    ('num_of_cheby_coeffs', 'NCHEBYC', 'J'),
+                                    ('max_error', 'MAXERROR', 'D'),
+                                    ('algorithm', 'USECHEBY', 'L'),
+                                    ('elapsed_time', 'TIME', 'E')]:
+        matr = np.reshape([x.__dict__[vector] for x in errors_in_param_space],
+                          (len(num_of_coefficients), len(samples_per_chunk)))
+        hdu_list.append(pyfits.ImageHDU(name=hdu_name,
+                                        data=matr))
 
     date = datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S")
     file_name = ('optimization_{table_name}_{date}.fits'
@@ -447,11 +447,7 @@ def save_polycomp_parameter_space(errors_in_param_space,
     log.info('writing optimization information in file %s',
              os.path.abspath(file_name))
 
-    hdu_table.header['EXTNAME'] = table_name
-    hdu_table.header['UNCSIZE'] = (uncompressed_size,
-                                   'Size (in bytes) of the uncompressed data')
-
-    hdu_table.writeto(file_name)
+    pyfits.HDUList(hdu_list).writeto(file_name)
 
     return file_name
 
@@ -470,6 +466,7 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
     algorithm = ppc.PCOMP_ALG_USE_CHEBYSHEV
     if not parser.getboolean(table, 'use_chebyshev'):
         algorithm = ppc.PCOMP_ALG_NO_CHEBYSHEV
+    uncompr_size = samples.size * samples.itemsize
 
     if parser.has_option(table, 'period'):
         period = parser.getfloat(table, 'period')
@@ -511,6 +508,7 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                                    num_of_compr_chunks=chunks.num_of_compressed_chunks(),
                                    num_of_poly_coeffs=params.num_of_poly_coeffs(),
                                    num_of_cheby_coeffs=chunks.total_num_of_cheby_coeffs(),
+                                   cr=float(chunk_bytes) / uncompr_size,
                                    max_error=params.max_error(),
                                    algorithm=params.algorithm(),
                                    elapsed_time=end_time - start_time)
@@ -547,11 +545,12 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
 
     optimization_file_name = None
     if debug and explore_param_space:
-        uncompr_size = samples.size * samples.itemsize
         optimization_file_name = \
             save_polycomp_parameter_space(errors_in_param_space,
                                           uncompressed_size=uncompr_size,
-                                          table_name=table)
+                                          table_name=table,
+                                          num_of_coefficients=num_of_coefficients_space,
+                                          samples_per_chunk=samples_per_chunk_space)
 
     if explore_param_space:
         log.info('the best compression parameters for "%s" are '
@@ -683,11 +682,11 @@ def read_and_compress_table(parser, table, debug):
         cur_hdu.header['PCSRCTP'] = (str(samples.dtype),
                                      'Original NumPy type of the data')
         cur_hdu.header['PCUNCSZ'] = (samples.itemsize * samples.size,
-                                     'Size (in bytes) of the uncompressed data')
+                                     'Size of the uncompressed data [bytes]')
         cur_hdu.header['PCCOMSZ'] = (num_of_bytes,
-                                     'Size (in bytes) of the compressed data')
+                                     'Size of the compressed data [bytes]')
         cur_hdu.header['PCTIME'] = (elapsed_time,
-                                    'Time (in seconds) used for compression')
+                                    'Time used for compression [s]')
         cr = float(cur_hdu.header['PCUNCSZ']) / float(cur_hdu.header['PCCOMSZ'])
         cur_hdu.header['PCCR'] = (cr, 'Compression ratio')
         log.info('table "%s" compressed, %d bytes compressed to %d (cr: %.4f)',
