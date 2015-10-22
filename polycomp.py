@@ -118,6 +118,22 @@ def numpy_type_equivalent(x, y):
 
 ########################################################################
 
+def humanize_size(val):
+    "Return a string representing 'val' using kB, MB... units"
+
+    float_val = float(val)
+    if float_val < 10 * 1024.0:
+        return '{0} bytes'.format(val)
+    elif float_val < 10 * 1024.0**2:
+        return '{0:.1f} kB'.format(float_val / 1024.0)
+    elif float_val < 10 * 1024.0**3:
+        return '{0:.1f} MB'.format(float_val / (1024.0**2))
+    elif float_val < 10 * 1024.0**4:
+        return '{0:.1f} GB'.format(float_val / (1024.0**3))
+    else:
+        return '{0:.1f} TB'.format(float_val / (1024.0**4))
+
+########################################################################
 
 def numpy_type_to_fits_type(nptype):
     """Convert a string representing a NumPy type (e.g., 'int8') into a
@@ -370,8 +386,13 @@ def polycomp_chunks_to_FITS_table(chunks, params):
 ParameterPoint = namedtuple('ParameterPoint',
                             ['hdu',
                              'compr_data_size',
-                             'chunks',
-                             'params',
+                             'samples_per_chunk',
+                             'num_of_chunks',
+                             'num_of_compr_chunks',
+                             'num_of_poly_coeffs',
+                             'num_of_cheby_coeffs',
+                             'max_error',
+                             'algorithm',
                              'elapsed_time'])
 
 def save_polycomp_parameter_space(errors_in_param_space,
@@ -388,10 +409,7 @@ def save_polycomp_parameter_space(errors_in_param_space,
 
     hdu_table = pyfits.BinTableHDU.from_columns([
         pyfits.Column(name='CHUNKLEN', format='1I',
-                      array=[x.params.samples_per_chunk()
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='POLYCOEFS', format='1B',
-                      array=[x.params.num_of_poly_coeffs()
+                      array=[x.samples_per_chunk
                              for x in errors_in_param_space]),
         pyfits.Column(name='COMPRSIZ', format='1J',
                       array=[x.compr_data_size
@@ -400,22 +418,25 @@ def save_polycomp_parameter_space(errors_in_param_space,
                       array=[float(uncompressed_size) / x.compr_data_size
                              for x in errors_in_param_space]),
         pyfits.Column(name='NCK', format='1J',
-                      array=[len(x.chunks)
+                      array=[x.num_of_chunks
                              for x in errors_in_param_space]),
         pyfits.Column(name='NCOMPCK', format='1J',
-                      array=[x.chunks.num_of_compressed_chunks()
+                      array=[x.num_of_compr_chunks
+                             for x in errors_in_param_space]),
+        pyfits.Column(name='POLYCOEFS', format='1B',
+                      array=[x.num_of_poly_coeffs
                              for x in errors_in_param_space]),
         pyfits.Column(name='NCHEBYC', format='1J',
-                      array=[x.chunks.total_num_of_cheby_coeffs()
+                      array=[x.num_of_cheby_coeffs
                              for x in errors_in_param_space]),
         pyfits.Column(name='MAXERR', format='1D',
-                      array=[x.params.max_error()
+                      array=[x.max_error
+                             for x in errors_in_param_space]),
+        pyfits.Column(name='USECHEBY', format='1L',
+                      array=[x.algorithm != ppc.PCOMP_ALG_NO_CHEBYSHEV
                              for x in errors_in_param_space]),
         pyfits.Column(name='TIME', format='1E',
                       array=[x.elapsed_time
-                             for x in errors_in_param_space]),
-        pyfits.Column(name='USECHEBY', format='1L',
-                      array=[x.params.algorithm() != ppc.PCOMP_ALG_NO_CHEBYSHEV
                              for x in errors_in_param_space])
         ])
 
@@ -459,6 +480,9 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                           (len(samples_per_chunk_space) > 1)
 
     # Loop over the set of parameters to find the best one
+    best_size = None
+    best_parameter_point = None
+    best_chunks = None
     errors_in_param_space = []
     for num_of_coeffs, samples_per_chunk in itertools.product(num_of_coefficients_space,
                                                               samples_per_chunk_space):
@@ -479,27 +503,44 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
         end_time = time.clock()
 
         chunk_bytes = chunks.num_of_bytes()
-        cur_point = ParameterPoint(compr_data_size=chunk_bytes,
-                                   hdu=cur_hdu,
-                                   chunks=chunks,
-                                   params=params,
+
+        cur_point = ParameterPoint(hdu=cur_hdu,
+                                   compr_data_size=chunk_bytes,
+                                   samples_per_chunk=params.samples_per_chunk(),
+                                   num_of_chunks=len(chunks),
+                                   num_of_compr_chunks=chunks.num_of_compressed_chunks(),
+                                   num_of_poly_coeffs=params.num_of_poly_coeffs(),
+                                   num_of_cheby_coeffs=chunks.total_num_of_cheby_coeffs(),
+                                   max_error=params.max_error(),
+                                   algorithm=params.algorithm(),
                                    elapsed_time=end_time - start_time)
         errors_in_param_space.append(cur_point)
+
+        is_this_the_best = False
+        if best_size is None or best_size > chunk_bytes:
+            best_size = chunk_bytes
+            best_parameter_point = cur_point
+            best_chunks = chunks
+            is_this_the_best = True
 
         if explore_param_space:
             # Use the size of the data part as figure of merit. This is
             # calculated as the number of bytes required for the whole HDU
             # minus the size of the header
             cur_num_of_bytes = cur_hdu.filebytes() - len(str(cur_hdu.header))
-            log.info('  configuration with num_of_coefficients=%d, '
-                     'samples_per_chunk=%d requires %d bytes (the FITS '
-                     'file takes %d bytes, the increment is %.2f%%)',
+            message = ('  configuration with num_of_coefficients=%d, '
+                       'samples_per_chunk=%d requires %s (the FITS '
+                       'file takes %s, the increment is %.2f%%)')
+            if is_this_the_best:
+                message += ' (this is the best so far)'
+
+            log.info(message,
                      num_of_coeffs, samples_per_chunk,
-                     chunk_bytes,
-                     cur_num_of_bytes,
+                     humanize_size(chunk_bytes),
+                     humanize_size(cur_num_of_bytes),
                      (cur_num_of_bytes - chunk_bytes) * 100.0 / chunk_bytes)
 
-    if len(errors_in_param_space) == 0:
+    if best_chunks is None:
         log.error('polynomial compression parameters expected for table "%s"',
                   table)
         sys.exit(1)
@@ -512,21 +553,21 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                                           uncompressed_size=uncompr_size,
                                           table_name=table)
 
-    errors_in_param_space.sort(key=lambda x: x.compr_data_size)
-    best_configuration = errors_in_param_space[0]
     if explore_param_space:
         log.info('the best compression parameters for "%s" are '
-                 'num_of_coefficients=%d, samples_per_chunk=%d (%d bytes)',
+                 'num_of_coefficients=%d, samples_per_chunk=%d (%s)',
                  table,
-                 best_configuration.params.num_of_poly_coeffs(),
-                 best_configuration.params.samples_per_chunk(),
-                 best_configuration.compr_data_size)
+                 best_parameter_point.num_of_poly_coeffs,
+                 best_parameter_point.samples_per_chunk,
+                 humanize_size(best_parameter_point.compr_data_size))
 
+    best_parameter_point.hdu.header['PCRAWCS'] = (best_parameter_point.compr_data_size,
+                                                  'Size of the encoded data [bytes]')
     if optimization_file_name is not None:
-        best_configuration.hdu.header['OPTIMFN'] = (optimization_file_name,
-                                                    'Path to the file with optimization '
-                                                    'infos')
-    return (best_configuration.hdu, best_configuration.compr_data_size)
+        best_parameter_point.hdu.header['PCOPTIM'] = (optimization_file_name,
+                                                      'Path to the file with optimization '
+                                                      'info')
+    return (best_parameter_point.hdu, best_parameter_point.compr_data_size)
 
 ########################################################################
 
