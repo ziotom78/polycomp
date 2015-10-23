@@ -441,7 +441,7 @@ def save_polycomp_parameter_space(errors_in_param_space,
                                         data=matr))
 
     date = datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S")
-    file_name = ('optimization_{table_name}_{date}.fits'
+    file_name = ('optimization_{date}_{table_name}.fits'
                  .format(table_name=table_name,
                          date=date))
     log.info('writing optimization information in file %s',
@@ -508,7 +508,7 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                                    num_of_compr_chunks=chunks.num_of_compressed_chunks(),
                                    num_of_poly_coeffs=params.num_of_poly_coeffs(),
                                    num_of_cheby_coeffs=chunks.total_num_of_cheby_coeffs(),
-                                   cr=float(chunk_bytes) / uncompr_size,
+                                   cr=uncompr_size / float(chunk_bytes),
                                    max_error=params.max_error(),
                                    algorithm=params.algorithm(),
                                    elapsed_time=end_time - start_time)
@@ -527,8 +527,8 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
             # minus the size of the header
             cur_num_of_bytes = cur_hdu.filebytes() - len(str(cur_hdu.header))
             message = ('  configuration with num_of_coefficients=%d, '
-                       'samples_per_chunk=%d requires %s (the FITS '
-                       'file takes %s, the increment is %.2f%%)')
+                       'samples_per_chunk=%d requires %s (FITS-encoded '
+                       'data take %s, with a variation of %+.2f%%)')
             if is_this_the_best:
                 message += ' (this is the best so far)'
 
@@ -689,8 +689,9 @@ def read_and_compress_table(parser, table, debug):
                                     'Time used for compression [s]')
         cr = float(cur_hdu.header['PCUNCSZ']) / float(cur_hdu.header['PCCOMSZ'])
         cur_hdu.header['PCCR'] = (cr, 'Compression ratio')
-        log.info('table "%s" compressed, %d bytes compressed to %d (cr: %.4f)',
-                 table, cur_hdu.header['PCUNCSZ'], cur_hdu.header['PCCOMSZ'], cr)
+        log.info('table "%s" compressed, %s compressed to %s (cr: %.4f)',
+                 table, humanize_size(cur_hdu.header['PCUNCSZ']),
+                 humanize_size(cur_hdu.header['PCCOMSZ']), cr)
 
     return cur_hdu
 
