@@ -4,7 +4,7 @@
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
 import os.path as path
-from distutils.version import StrictVersion
+from distutils.version import LooseVersion as Version
 
 try:
     from Cython.Build import cythonize
@@ -13,7 +13,7 @@ try:
 except ImportError:
     use_cython = False
 else:
-    use_cython = StrictVersion(cython_version) >= StrictVersion('0.18.0')
+    use_cython = Version(cython_version) >= Version('0.18.0')
 
 
 if use_cython:
