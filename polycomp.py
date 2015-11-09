@@ -451,32 +451,22 @@ def save_polycomp_parameter_space(errors_in_param_space,
 
     return file_name
 
-def compress_and_encode_poly(parser, table, samples_format, samples, debug):
-    """Save "samples" in a binary table (polynomial compression)
+################################################################################
 
-    This function is called by "compress_to_FITS_table".
-    """
+def numpy_array_size(arr):
+    return arr.itemsize * arr.size
 
-    # Remove unused parameters
-    del samples_format
+################################################################################
 
-    num_of_coefficients_space = parse_intset(parser.get(table, 'num_of_coefficients'))
-    samples_per_chunk_space = parse_intset(parser.get(table, 'samples_per_chunk'))
-    max_error = parser.getfloat(table, 'max_error')
-    algorithm = ppc.PCOMP_ALG_USE_CHEBYSHEV
-    if not parser.getboolean(table, 'use_chebyshev'):
-        algorithm = ppc.PCOMP_ALG_NO_CHEBYSHEV
-    uncompr_size = samples.size * samples.itemsize
+def must_explore_param_space(num_of_coefficients_space, samples_per_chunk_space):
+    return (len(num_of_coefficients_space) > 1) or \
+        (len(samples_per_chunk_space) > 1)
 
-    if parser.has_option(table, 'period'):
-        period = parser.getfloat(table, 'period')
-    else:
-        period = None
+################################################################################
 
-    explore_param_space = (len(num_of_coefficients_space) > 1) or \
-                          (len(samples_per_chunk_space) > 1)
-
-    # Loop over the set of parameters to find the best one
+def explore_parameter_space(samples, num_of_coefficients_space,
+                            samples_per_chunk_space, max_error,
+                            algorithm, period, debug):
     best_size = None
     best_parameter_point = None
     best_chunks = None
@@ -508,7 +498,7 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                                    num_of_compr_chunks=chunks.num_of_compressed_chunks(),
                                    num_of_poly_coeffs=params.num_of_poly_coeffs(),
                                    num_of_cheby_coeffs=chunks.total_num_of_cheby_coeffs(),
-                                   cr=uncompr_size / float(chunk_bytes),
+                                   cr=numpy_array_size(samples) / float(chunk_bytes),
                                    max_error=params.max_error(),
                                    algorithm=params.algorithm(),
                                    elapsed_time=end_time - start_time)
@@ -521,7 +511,8 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
             best_chunks = chunks
             is_this_the_best = True
 
-        if explore_param_space:
+        if must_explore_param_space(num_of_coefficients_space,
+                                    samples_per_chunk_space):
             # Use the size of the data part as figure of merit. This is
             # calculated as the number of bytes required for the whole HDU
             # minus the size of the header
@@ -543,16 +534,49 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                   table)
         sys.exit(1)
 
+    return best_parameter_point, errors_in_param_space
+
+################################################################################
+
+def compress_and_encode_poly(parser, table, samples_format, samples, debug):
+    """Save "samples" in a binary table (polynomial compression)
+
+    This function is called by "compress_to_FITS_table".
+    """
+
+    # Remove unused parameters
+    del samples_format
+
+    num_of_coefficients_space = parse_intset(parser.get(table, 'num_of_coefficients'))
+    samples_per_chunk_space = parse_intset(parser.get(table, 'samples_per_chunk'))
+    max_error = parser.getfloat(table, 'max_error')
+    algorithm = ppc.PCOMP_ALG_USE_CHEBYSHEV
+    if not parser.getboolean(table, 'use_chebyshev'):
+        algorithm = ppc.PCOMP_ALG_NO_CHEBYSHEV
+
+    if parser.has_option(table, 'period'):
+        period = parser.getfloat(table, 'period')
+    else:
+        period = None
+
+    # Loop over the set of parameters to find the best one
+    best_parameter_point, errors_in_param_space = \
+        explore_parameter_space(samples, num_of_coefficients_space,
+                                samples_per_chunk_space,
+                                max_error, algorithm, period, debug)
+
     optimization_file_name = None
-    if debug and explore_param_space:
+    if debug and must_explore_param_space(num_of_coefficients_space,
+                                          samples_per_chunk_space):
         optimization_file_name = \
             save_polycomp_parameter_space(errors_in_param_space,
-                                          uncompressed_size=uncompr_size,
+                                          uncompressed_size=numpy_array_size(samples),
                                           table_name=table,
                                           num_of_coefficients=num_of_coefficients_space,
                                           samples_per_chunk=samples_per_chunk_space)
 
-    if explore_param_space:
+    if must_explore_param_space(num_of_coefficients_space,
+                                samples_per_chunk_space):
         log.info('the best compression parameters for "%s" are '
                  'num_of_coefficients=%d, samples_per_chunk=%d (%s)',
                  table,
@@ -703,9 +727,18 @@ def add_metadata_to_HDU(parser, hdu_header):
     # Since parser.options lists the variables in the [DEFAULT]
     # section as well, we must perform a set subtraction in order to
     # loop only over the true metadata.
-    defaults = set(parser.defaults().keys())
-    for name in set(parser.options('metadata')) - defaults:
-        hdu_header[name] = parser.get('metadata', name)
+
+    if not parser.has_section('metadata'):
+        return
+
+    try:
+        defaults = set(parser.defaults().keys())
+        for name in set(parser.options('metadata')) - defaults:
+            hdu_header[name] = parser.get('metadata', name)
+    except ConfigParser.error as e:
+        # If there are errors in the 'metadata' section, just warn
+        # about them
+        log.warn('while processing metadata: %s', str(e))
 
 ########################################################################
 
