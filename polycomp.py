@@ -384,16 +384,13 @@ def polycomp_chunks_to_FITS_table(chunks, params):
 ########################################################################
 
 ParameterPoint = namedtuple('ParameterPoint',
-                            ['hdu',
+                            ['chunks',
+                             'params',
                              'compr_data_size',
-                             'samples_per_chunk',
                              'num_of_chunks',
                              'num_of_compr_chunks',
-                             'num_of_poly_coeffs',
                              'num_of_cheby_coeffs',
                              'cr',
-                             'max_error',
-                             'algorithm',
                              'elapsed_time'])
 
 def save_polycomp_parameter_space(errors_in_param_space,
@@ -464,28 +461,21 @@ def must_explore_param_space(num_of_coefficients_space, samples_per_chunk_space)
 
 ################################################################################
 
-def sample_polycomp_configuration(samples, params, debug):
-    chunks = ppc.compress_polycomp(samples, params)
+def sample_polycomp_configuration(samples, params):
 
     start_time = time.clock()
-    if debug:
-        cur_hdu = polycomp_chunks_to_FITS_table_debug(chunks, params)
-    else:
-        cur_hdu = polycomp_chunks_to_FITS_table(chunks, params)
+    chunks = ppc.compress_polycomp(samples, params)
     end_time = time.clock()
 
     chunk_bytes = chunks.num_of_bytes()
 
-    cur_point = ParameterPoint(hdu=cur_hdu,
+    cur_point = ParameterPoint(chunks=chunks,
+                               params=params,
                                compr_data_size=chunk_bytes,
-                               samples_per_chunk=params.samples_per_chunk(),
                                num_of_chunks=len(chunks),
                                num_of_compr_chunks=chunks.num_of_compressed_chunks(),
-                               num_of_poly_coeffs=params.num_of_poly_coeffs(),
                                num_of_cheby_coeffs=chunks.total_num_of_cheby_coeffs(),
                                cr=numpy_array_size(samples) / float(chunk_bytes),
-                               max_error=params.max_error(),
-                               algorithm=params.algorithm(),
                                elapsed_time=end_time - start_time)
 
     return chunks, cur_point
@@ -499,7 +489,7 @@ def polycomp_configuration_cost(params):
 
 def parameter_space_survey(samples, num_of_coefficients_space,
                            samples_per_chunk_space, max_error,
-                           algorithm, period, debug):
+                           algorithm, period):
 
     """Performs a detailed survey of every configuration in the parameter
     space given by "num_of_coefficients_space" and
@@ -518,124 +508,26 @@ def parameter_space_survey(samples, num_of_coefficients_space,
         if period is not None:
             params.set_period(period)
 
-        chunks, cur_point = sample_polycomp_configuration(samples, params, debug)
+        chunks, cur_point = sample_polycomp_configuration(samples, params)
         errors_in_param_space.append(cur_point)
 
         is_this_the_best = False
-        if best_size is None or best_size > cur_point.compr_data_bytes:
-            best_size = cur_point.compr_data_bytes
+        if best_size is None or best_size > cur_point.compr_data_size:
+            best_size = cur_point.compr_data_size
             best_parameter_point = cur_point
             best_chunks = chunks
             is_this_the_best = True
 
         if must_explore_param_space(num_of_coefficients_space,
                                     samples_per_chunk_space):
-            # Use the size of the data part as figure of merit. This is
-            # calculated as the number of bytes required for the whole HDU
-            # minus the size of the header
-            cur_num_of_bytes = cur_hdu.filebytes() - len(str(cur_hdu.header))
             message = ('  configuration with num_of_coefficients=%d, '
-                       'samples_per_chunk=%d requires %s (FITS-encoded '
-                       'data take %s, with a variation of %+.2f%%)')
+                       'samples_per_chunk=%d requires %s')
             if is_this_the_best:
                 message += ' (this is the best so far)'
 
             log.info(message,
                      num_of_coeffs, samples_per_chunk,
-                     humanize_size(cur_point.compr_data_bytes),
-                     humanize_size(cur_num_of_bytes),
-                     (cur_num_of_bytes - cur_point.compr_data_bytes) * 100.0 / cur_point.compr_data_bytes)
-
-    if best_chunks is None:
-        log.error('polynomial compression parameters expected for table "%s"',
-                  table)
-        sys.exit(1)
-
-    return best_parameter_point, errors_in_param_space
-
-################################################################################
-
-def parameter_space_find_best(samples, num_of_coefficients_space,
-                              samples_per_chunk_space, max_error,
-                              algorithm, period, debug):
-
-    """Performs an optimized search of the best configuration in the
-    parameter space given by "num_of_coefficients_space" and
-    "samples_per_chunk_space"."""
-
-    best_size = None
-    best_parameter_point = None
-    best_chunks = None
-
-    optimization_start_time = time.clock()
-
-    init_phase = True
-    x_range = [f(num_of_coefficients_space) for f in (np.min, np.max)]
-    y_range = [f(samples_per_chunk_space) for f in (np.min, np.max)]
-
-    log.debug('x_range = %s', str(x_range))
-    log.debug('y_range = %s', str(y_range))
-    midpoint_x, midpoint_y = [int(np.mean(k)) for k in (x_range, y_range)]
-
-    while True:
-        log.debug('I am at point %d, %d', midpoint_x, midpoint_y)
-
-        # Among the 8 points around (x, y), determine the one which is
-        # the best by just looking at points P1, P2, P3:
-        #
-        #         P2
-        #    .------*------.
-        #    |      |      |
-        #    |      |      |
-        #    |      |(x,y) |
-        #    .------*------.
-        #    |      |      |
-        #    |      |      |
-        #    |      |      |
-        #    *------.------*
-        #   P1             P3
-        #
-        # The idea is to find the plane passing through P1, P2, P3 and
-        # use it to estimate which of the 9 points in the plane above
-        # is the best.
-
-        chunks = [0, 0, 0]
-        point = [0, 0, 0]
-        for idx, incr in enumerate([(-1, -1), (0, 1), (1, -1)]):
-            dx, dy = incr
-            params = ppc.Polycomp(num_of_coeffs=midpoint_x + dx,
-                                  num_of_samples=midpoint_y + dy,
-                                  max_allowable_error=max_error,
-                                  algorithm=algorithm)
-            if period is not None:
-                params.set_period(period)
-
-            chunks[idx], point[idx] = sample_polycomp_configuration(samples, params,
-                                                                    debug)
-
-        for idx in (0, 1, 2):
-            print "   point {0}, {1} = {2}".format(point[idx].num_of_poly_coeffs,
-                                                   point[idx].samples_per_chunk,
-                                                   humanize_size(point[idx].compr_data_size))
-
-        plane = np.linalg.solve(np.array([[point[0].num_of_poly_coeffs,
-                                           point[0].samples_per_chunk,
-                                           1],
-                                          [point[1].num_of_poly_coeffs,
-                                           point[1].samples_per_chunk,
-                                           1],
-                                          [point[2].num_of_poly_coeffs,
-                                           point[2].samples_per_chunk,
-                                           1]]),
-                                [point[idx].compr_data_size for idx in (0, 1, 2)])
-
-        cr_model = [(midpoint_x + x,
-                     midpoint_y + y,
-                     np.dot(plane, np.array([midpoint_x + x, midpoint_y + y, 1])))
-                    for x in (-1, 0, 1) for y in (-1, 0, 1)]
-        cr_model.sort(key=lambda p: p[2])
-
-        midpoint_x, midpoint_y = cr_model[0][0:2]
+                     humanize_size(cur_point.compr_data_size))
 
     if best_chunks is None:
         log.error('polynomial compression parameters expected for table "%s"',
@@ -674,15 +566,16 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
         best_parameter_point, errors_in_param_space = \
             parameter_space_survey(samples, num_of_coefficients_space,
                                    samples_per_chunk_space,
-                                   max_error, algorithm, period, debug)
+                                   max_error, algorithm, period)
 
     else:
 
+        num_of_coeffs_range = [f(num_of_coefficients_space) for f in (np.min, np.max)]
+        samples_per_chunk_range = [f(samples_per_chunk_space) for f in (np.min, np.max)]
         best_parameter_point, errors_in_param_space = \
-            parameter_space_find_best(samples, num_of_coefficients_space,
-                                      samples_per_chunk_space,
-                                      max_error, algorithm, period,
-                                      debug)
+            ppc.find_best_polycomp_parameters(samples, num_of_coeffs_range,
+                                              samples_per_chunk_range,
+                                              max_error, algorithm, period)
 
     optimization_file_name = None
     if debug and must_explore_param_space(num_of_coefficients_space,
@@ -699,17 +592,24 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
         log.info('the best compression parameters for "%s" are '
                  'num_of_coefficients=%d, samples_per_chunk=%d (%s)',
                  table,
-                 best_parameter_point.num_of_poly_coeffs,
-                 best_parameter_point.samples_per_chunk,
+                 best_parameter_point.params.num_of_poly_coeffs(),
+                 best_parameter_point.params.samples_per_chunk(),
                  humanize_size(best_parameter_point.compr_data_size))
 
-    best_parameter_point.hdu.header['PCRAWCS'] = (best_parameter_point.compr_data_size,
+    if debug:
+        hdu = polycomp_chunks_to_FITS_table_debug(best_parameter_point.chunks,
+                                                  best_parameter_point.params)
+    else:
+        hdu = polycomp_chunks_to_FITS_table(best_parameter_point.chunks,
+                                            best_parameter_point.params)
+
+    hdu.header['PCRAWCS'] = (best_parameter_point.compr_data_size,
                                                   'Size of the encoded data [bytes]')
     if optimization_file_name is not None:
-        best_parameter_point.hdu.header['PCOPTIM'] = (optimization_file_name,
-                                                      'Path to the file with optimization '
-                                                      'info')
-    return (best_parameter_point.hdu, best_parameter_point.compr_data_size)
+        hdu.header['PCOPTIM'] = (optimization_file_name,
+                                 'Path to the file with optimization '
+                                 'info')
+    return (hdu, best_parameter_point.compr_data_size)
 
 ########################################################################
 
