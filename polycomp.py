@@ -383,16 +383,6 @@ def polycomp_chunks_to_FITS_table(chunks, params):
 
 ########################################################################
 
-ParameterPoint = namedtuple('ParameterPoint',
-                            ['chunks',
-                             'params',
-                             'compr_data_size',
-                             'num_of_chunks',
-                             'num_of_compr_chunks',
-                             'num_of_cheby_coeffs',
-                             'cr',
-                             'elapsed_time'])
-
 def save_polycomp_parameter_space(errors_in_param_space,
                                   uncompressed_size,
                                   table_name,
@@ -423,14 +413,21 @@ def save_polycomp_parameter_space(errors_in_param_space,
                                      'The parameter that has been compressed')
     hdu_list[0].header['UNCSIZE'] = (uncompressed_size,
                                      'Size of the uncompressed data [bytes]')
+    hdu_list[0].header['MAXERR'] = (errors_in_param_space[0].params.max_error(),
+                                    'Maximum allowable error')
+    hdu_list[0].header['ALGOR'] = (errors_in_param_space[0].params.algorithm(),
+                                   'Type of compression algorithm')
+
+    period = errors_in_param_space[0].params.period()
+    if period is None:
+        period = 0.0
+    hdu_list[0].header['PERIOD'] = (period, 'Periodicity of the variable (0=none)')
 
     for (vector, hdu_name, fmt) in [('compr_data_size', 'COMPRSIZ', 'J'),
                                     ('cr', 'CR', 'E'),
                                     ('num_of_chunks', 'NUMCK', 'J'),
                                     ('num_of_compr_chunks', 'NUMCRCK', 'J'),
                                     ('num_of_cheby_coeffs', 'NCHEBYC', 'J'),
-                                    ('max_error', 'MAXERROR', 'D'),
-                                    ('algorithm', 'USECHEBY', 'L'),
                                     ('elapsed_time', 'TIME', 'E')]:
         matr = np.reshape([x.__dict__[vector] for x in errors_in_param_space],
                           (len(num_of_coefficients), len(samples_per_chunk)))
@@ -461,27 +458,6 @@ def must_explore_param_space(num_of_coefficients_space, samples_per_chunk_space)
 
 ################################################################################
 
-def sample_polycomp_configuration(samples, params):
-
-    start_time = time.clock()
-    chunks = ppc.compress_polycomp(samples, params)
-    end_time = time.clock()
-
-    chunk_bytes = chunks.num_of_bytes()
-
-    cur_point = ParameterPoint(chunks=chunks,
-                               params=params,
-                               compr_data_size=chunk_bytes,
-                               num_of_chunks=len(chunks),
-                               num_of_compr_chunks=chunks.num_of_compressed_chunks(),
-                               num_of_cheby_coeffs=chunks.total_num_of_cheby_coeffs(),
-                               cr=numpy_array_size(samples) / float(chunk_bytes),
-                               elapsed_time=end_time - start_time)
-
-    return chunks, cur_point
-
-################################################################################
-
 def polycomp_configuration_cost(params):
     return cur_hdu.filebytes() - len(str(cur_hdu.header))
 
@@ -508,7 +484,7 @@ def parameter_space_survey(samples, num_of_coefficients_space,
         if period is not None:
             params.set_period(period)
 
-        chunks, cur_point = sample_polycomp_configuration(samples, params)
+        chunks, cur_point = ppc.sample_polycomp_configuration(samples, params)
         errors_in_param_space.append(cur_point)
 
         is_this_the_best = False
