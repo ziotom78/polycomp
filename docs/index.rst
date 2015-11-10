@@ -13,8 +13,6 @@ Contents:
 
    how-to-get-it
    intro
-   examples
-   compression-schemes
 
 Indices and tables
 ==================
