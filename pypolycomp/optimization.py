@@ -94,94 +94,71 @@ class PointCache:
 
     def get_point(self, x, y):
         if (x, y) in self.cache:
-            print "Cache hit: {0}".format((x, y))
             return self.cache[(x, y)]
         else:
             return self.add_point(x, y)
 
 ################################################################################
 
-def _metropolis (cost, temperature):
-    """Return the Metropolis probability associated with the given `cost' and
-    `temperature'.
-
-    See T.J.P. Penna, "Traveling salesman problem and Tsallis statistics",
-    Physical Review E, January 1995."""
-
-    number = np.random.uniform (0.0, 1.0)
-    return cost < 0.0 or number < np.exp(-cost / temperature)
-
-################################################################################
-
 def find_best_polycomp_parameters(samples, num_of_coefficients_range,
                                   samples_per_chunk_range, max_error,
-                                  algorithm, period=None):
+                                  algorithm, period=None, callback=None):
 
     """Performs an optimized search of the best configuration in the
     parameter space given by "num_of_coefficients_space" and
     "samples_per_chunk_space"."""
 
-    best_size = None
-    best_parameter_point = None
-    best_chunks = None
-
     optimization_start_time = time.clock()
 
-    init_phase = True
     x_range = num_of_coefficients_range
     y_range = samples_per_chunk_range
 
     midpoint_x, midpoint_y = [int(np.mean(k)) for k in (x_range, y_range)]
-
-    temperature = 0.5
-    cooling_factor = 0.9
-    cooling_speed = 10
-
     param_points = PointCache(samples=samples,
                               max_allowable_error=max_error,
                               algorithm=algorithm,
                               period=period)
-    chunks, point = param_points.get_point(midpoint_x, midpoint_y)
-    print('Start at point {0}, {1}'.format(midpoint_x, midpoint_y))
 
-    iteration = 0
+    # The logic of this code is the following:
+    #
+    # 1. Start from a point (x, y)
+    # 2. Sample the point and all its neighbours
+    # 3. Move to the best point among the nine that have been sampled
+    # 4. Repeat from point 2. until the best point is the current one
+    #
+    # Many points will be sampled more than once, but we use a
+    # "PointCache" object to do all the sampling, so that only newer
+    # points need to be recalculated every time.
+
+    errors_in_param_space = {}
+    num_of_steps = 1
     while True:
-        successful_mutations = 0
-        for k in range(cooling_speed):
-            mut_x = np.random.random_integers(x_range[0], x_range[1])
-            mut_y = np.random.random_integers(midpoint_y - 10, midpoint_y + 10)
+        ring_of_points = [(-1, -1), (0, -1), (1, -1),
+                          (-1,  0), (0,  0), (1,  0),
+                          (-1,  1), (0,  1), (1,  1)]
 
-            if mut_x < x_range[0] or mut_x > x_range[1]:
+        ring_of_configurations = []
+        for dx, dy in ring_of_points:
+            cur_x = midpoint_x + dx
+            cur_y = midpoint_y + dy
+            if cur_x < x_range[0] or cur_x > x_range[1]:
                 continue
-            if mut_y < y_range[0] or mut_y > y_range[1]:
-                continue
-            if (mut_x, mut_y) == (midpoint_x, midpoint_y):
+            if cur_y < y_range[0] or cur_y > y_range[1]:
                 continue
 
-            mut_chunks, mut_point = param_points.get_point(mut_x, mut_y)
-            print('I am at point {0}, {1} ({2})'.format(mut_x, mut_y,
-                                                        mut_point.compr_data_size))
+            chunks, params = param_points.get_point(cur_x, cur_y)
+            if callback is not None:
+                callback(cur_x, cur_y, params, num_of_steps)
 
-            if _metropolis(mut_point.compr_data_size - point.compr_data_size,
-                           temperature):
-                chunks = mut_chunks
-                point = mut_point
-                successful_mutations += 1
-                midpoint_x = mut_x
-                midpoint_y = mut_y
-                print('Mutation {0} accepted, size is now {1}'
-                      .format((midpoint_x, midpoint_y), point.compr_data_size))
+            errors_in_param_space[(cur_x, cur_y)] = params
+            ring_of_configurations.append((cur_x, cur_y, chunks, params))
 
-            iteration += 1
+        ring_of_configurations.sort(key=lambda p: p[3].compr_data_size)
+        best_x, best_y, best_chunks, best_params = ring_of_configurations[0]
+        if (best_x, best_y) == (midpoint_x, midpoint_y):
+            break
 
-            if successful_mutations >= 5:
-                break
+        midpoint_x, midpoint_y = best_x, best_y
+        num_of_steps += 1
 
-        temperature *= cooling_factor
-
-    if best_chunks is None:
-        log.error('polynomial compression parameters expected for table "%s"',
-                  table)
-        sys.exit(1)
-
-    return best_parameter_point, errors_in_param_space
+    return best_params, errors_in_param_space.values(), num_of_steps

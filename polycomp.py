@@ -535,27 +535,33 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
     else:
         period = None
 
-    # Loop over the set of parameters to find the best one
-    if parser.has_option(table, 'exhaustive_search') and \
-       parser.getboolean(table, 'exhaustive_search'):
+    exhaustive_search = parser.has_option(table, 'exhaustive_search') and \
+                        parser.getboolean(table, 'exhaustive_search')
 
+    # Loop over the set of parameters to find the best one
+    if exhaustive_search:
         best_parameter_point, errors_in_param_space = \
             parameter_space_survey(samples, num_of_coefficients_space,
                                    samples_per_chunk_space,
                                    max_error, algorithm, period)
-
     else:
-
         num_of_coeffs_range = [f(num_of_coefficients_space) for f in (np.min, np.max)]
         samples_per_chunk_range = [f(samples_per_chunk_space) for f in (np.min, np.max)]
-        best_parameter_point, errors_in_param_space = \
+
+        callback = (lambda x, y, params, steps: \
+                    log.debug("Point (%d, %d) sampled (step %d), size is %s",
+                              x, y, steps, humanize_size(params.compr_data_size)))
+        best_parameter_point, errors_in_param_space, num_of_steps = \
             ppc.find_best_polycomp_parameters(samples, num_of_coeffs_range,
                                               samples_per_chunk_range,
-                                              max_error, algorithm, period)
+                                              max_error, algorithm, period, callback)
+        log.debug("Best configuration found in %d iterations", num_of_steps)
 
     optimization_file_name = None
-    if debug and must_explore_param_space(num_of_coefficients_space,
-                                          samples_per_chunk_space):
+    if debug and \
+       must_explore_param_space(num_of_coefficients_space,
+                                samples_per_chunk_space) and \
+       exhaustive_search:
         optimization_file_name = \
             save_polycomp_parameter_space(errors_in_param_space,
                                           uncompressed_size=numpy_array_size(samples),
