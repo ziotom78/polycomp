@@ -23,7 +23,7 @@ def numpy_array_size(arr):
 
 ################################################################################
 
-def _sample_polycomp_configuration(samples, params):
+def sample_polycomp_configuration(samples, params):
 
     start_time = time.clock()
     chunks = ppc.compress_polycomp(samples, params)
@@ -70,7 +70,7 @@ class PointCache:
         if self.period is not None:
             params.set_period(self.period)
 
-        chunks, point = _sample_polycomp_configuration(self.samples, params)
+        chunks, point = sample_polycomp_configuration(self.samples, params)
         if self.best_size is None or point.compr_data_size < self.best_size:
             self.best_size = point.compr_data_size
             self.best_point = (chunks, point)
