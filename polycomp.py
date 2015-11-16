@@ -381,9 +381,17 @@ def polycomp_chunks_to_FITS_table(chunks, params):
 
     return hdu
 
+################################################################################
+
+def default_optimization_file_name(table_name):
+    date = datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S")
+    return ('optimization_{date}_{table_name}.fits'.format(table_name=table_name,
+                                                           date=date))
+
 ########################################################################
 
 def save_polycomp_parameter_space(errors_in_param_space,
+                                  file_name,
                                   uncompressed_size,
                                   table_name,
                                   num_of_coefficients,
@@ -434,10 +442,6 @@ def save_polycomp_parameter_space(errors_in_param_space,
         hdu_list.append(pyfits.ImageHDU(name=hdu_name,
                                         data=matr))
 
-    date = datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S")
-    file_name = ('optimization_{date}_{table_name}.fits'
-                 .format(table_name=table_name,
-                         date=date))
     log.info('writing optimization information in file %s',
              os.path.abspath(file_name))
 
@@ -558,12 +562,18 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
         log.debug("Best configuration found in %d iterations", num_of_steps)
 
     optimization_file_name = None
-    if debug and \
-       must_explore_param_space(num_of_coefficients_space,
+    if must_explore_param_space(num_of_coefficients_space,
                                 samples_per_chunk_space) and \
        exhaustive_search:
+
+        if parser.has_option(table, 'optimization_file_name'):
+            file_name = parser.get(table, 'optimization_file_name')
+        else:
+            file_name = default_optimization_file_name(table)
+
         optimization_file_name = \
             save_polycomp_parameter_space(errors_in_param_space,
+                                          file_name,
                                           uncompressed_size=numpy_array_size(samples),
                                           table_name=table,
                                           num_of_coefficients=num_of_coefficients_space,
