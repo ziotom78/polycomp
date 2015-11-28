@@ -445,7 +445,7 @@ def save_polycomp_parameter_space(errors_in_param_space,
     log.info('writing optimization information in file %s',
              os.path.abspath(file_name))
 
-    pyfits.HDUList(hdu_list).writeto(file_name)
+    pyfits.HDUList(hdu_list).writeto(file_name, clobber=True)
 
     return file_name
 
@@ -763,6 +763,9 @@ def do_compress(arguments):
     default_conf = {'clobber': 'True',
                     'write_checksum': 'True'}
     for key_val_pair in arguments['<key=value>']:
+        if '=' not in key_val_pair:
+            log.error('wrong key=value parameter "%s"', key_val_pair)
+            continue
         key, value = key_val_pair.split('=', 1)
         default_conf[key] = value
 
@@ -806,7 +809,7 @@ def do_compress(arguments):
 
     except (IOError, OSError) as exc:
         log.error('unable to write to file "%s": %s',
-                  output_file_name, exc.strerror)
+                  output_file_name, str(exc))
 
 ########################################################################
 
@@ -1016,6 +1019,19 @@ def do_decompress(arguments):
 
 ########################################################################
 
+def print_general_info():
+    import platform
+
+    log.info('Polycomp {ver} ({python} {pyver}, NumPy {npver}, PyFits {pfver})'
+             .format(ver=ppc.__version__,
+                     python=platform.python_implementation(),
+                     pyver=platform.python_version(),
+                     npver=np.__version__,
+                     pfver=pyfits.__version__))
+
+
+########################################################################
+
 def main():
     "Main function"
 
@@ -1023,6 +1039,8 @@ def main():
                     format='polycomp: %(levelname)s - %(message)s')
     arguments = docopt(__doc__,
                        version='Polycomp {0}'.format(ppc.__version__))
+
+    print_general_info()
 
     if arguments['--version']:
         print(ppc.__version__)
