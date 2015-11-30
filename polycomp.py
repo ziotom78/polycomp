@@ -95,29 +95,6 @@ def parse_intset(val):
 
 ########################################################################
 
-def to_native_endianness(samples):
-    "Convert the endianness of a NumPy array into native."
-
-    # Check for endianness
-    if str(samples.dtype)[0] in ('<', '>'):
-        # Convert to native order
-        new_dtype = '=' + str(samples.dtype)[1:]
-        return samples.astype(new_dtype)
-    else:
-        return samples
-
-########################################################################
-
-def numpy_type_equivalent(x, y):
-    """Return True if x and y are essentially the same type.
-
-    The comparison ignores endianness."""
-
-    return np.issubdtype(x, y) and \
-        (np.dtype(x).itemsize == np.dtype(y).itemsize)
-
-########################################################################
-
 def humanize_size(val):
     "Return a string representing 'val' using kB, MB... units"
 
@@ -132,39 +109,6 @@ def humanize_size(val):
         return '{0:.1f} GB'.format(float_val / (1024.0**3))
     else:
         return '{0:.1f} TB'.format(float_val / (1024.0**4))
-
-########################################################################
-
-def numpy_type_to_fits_type(nptype):
-    """Convert a string representing a NumPy type (e.g., 'int8') into a
-    FITS format character.
-
-    Return the character and the value for BZERO."""
-
-    if numpy_type_equivalent(nptype, 'int8'):
-        return 'B'
-    elif numpy_type_equivalent(nptype, 'int16'):
-        return 'I'
-    elif numpy_type_equivalent(nptype, 'int32'):
-        return 'J'
-    elif numpy_type_equivalent(nptype, 'int64'):
-        return 'K'
-    elif numpy_type_equivalent(nptype, 'uint8'):
-        return 'B'
-    elif numpy_type_equivalent(nptype, 'float32'):
-        return 'E'
-    elif numpy_type_equivalent(nptype, 'float64'):
-        return 'D'
-    elif numpy_type_equivalent(nptype, 'int16'):
-        return 'I'
-    elif numpy_type_equivalent(nptype, 'int32'):
-        return 'J'
-    elif numpy_type_equivalent(nptype, 'int64'):
-        return 'K'
-    else:
-        log.error('unable to save data of type %s into a FITS table',
-                  nptype)
-        sys.exit(1)
 
 ########################################################################
 
@@ -701,7 +645,7 @@ def read_and_compress_table(parser, table, debug):
                  table, compression)
 
         samples_format = input_file[hdu].columns.formats[column]
-        samples = to_native_endianness(input_file[hdu].data.field(column))
+        samples = ppc.to_native_endianness(input_file[hdu].data.field(column))
         if parser.has_option(table, 'datatype'):
             samples = np.array(samples, dtype=parser.get(table, 'datatype'))
 
@@ -816,25 +760,21 @@ def do_compress(arguments):
 def decompress_none(hdu):
     "Decompress an HDU which uses no compression"
 
-    return hdu.data.field(0), hdu.columns.formats[0]
+    return ppc.decompress_none_from_hdu(hdu), hdu.columns.formats[0]
 
 ########################################################################
 
 def decompress_rle(hdu):
     "Decompress an HDU containing a RLE-compressed datastream"
 
-    compr_samples = np.asarray(to_native_endianness(hdu.data.field(0)),
-                               dtype=hdu.header['PCSRCTP'])
-    return ppc.rle_decompress(compr_samples), hdu.columns.formats[0]
+    return ppc.decompress_rle_from_hdu(hdu), hdu.columns.formats[0]
 
 ########################################################################
 
 def decompress_diffrle(hdu):
     "Decompress an HDU containing a diffRLE-compressed datastream"
 
-    compr_samples = np.asarray(to_native_endianness(hdu.data.field(0)),
-                               dtype=hdu.header['PCSRCTP'])
-    return ppc.diffrle_decompress(compr_samples), hdu.columns.formats[0]
+    return ppc.decompress_diffrle_from_hdu(hdu), hdu.columns.formats[0]
 
 ########################################################################
 
@@ -846,7 +786,7 @@ def decompress_quant(hdu):
     quant.set_normalization(normalization=hdu.header['PCNORM'],
                             offset=hdu.header['PCOFS'])
     size_to_fits_fmt = {4: '1E', 8: '1D'}
-    compr_samples = to_native_endianness(hdu.data.field(0))
+    compr_samples = ppc.to_native_endianness(hdu.data.field(0))
 
     try:
         return (quant.decompress(compr_samples,
@@ -896,9 +836,7 @@ def decompress_poly_debug(hdu):
 def decompress_poly_compact(hdu):
     "Decompress an HDU containing polynomial compressed data in compact form"
 
-    raw_bytes = to_native_endianness(hdu.data.field(0))
-    chunk_array = ppc.decode_chunk_array(raw_bytes)
-    return ppc.decompress_polycomp(chunk_array), 'D'
+    return ppc.decompress_polynomial_from_hdu(hdu), 'D'
 
 ########################################################################
 
@@ -915,22 +853,18 @@ def decompress_poly(hdu):
 def decompress_zlib(hdu):
     "Decompress an HDU containing a datastream compressed using zlib"
 
-    data = hdu.data.field(0)
     source_type = np.dtype(hdu.header['PCSRCTP'])
-    return (np.fromstring(zlib.decompress(data.tostring()),
-                          dtype=source_type),
-            numpy_type_to_fits_type(source_type))
+    return (ppc.decompress_zlib_from_hdu(hdu),
+            ppc.numpy_type_to_fits_type(source_type))
 
 ########################################################################
 
 def decompress_bzip2(hdu):
     "Decompress an HDU containing a datastream compressed using bzip2"
 
-    data = hdu.data.field(0)
     source_type = np.dtype(hdu.header['PCSRCTP'])
-    return (np.fromstring(bz2.decompress(data.tostring()),
-                          dtype=source_type),
-            numpy_type_to_fits_type(source_type))
+    return (ppc.decompress_bzip2_from_hdu(hdu),
+            ppc.numpy_type_to_fits_type(source_type))
 
 ########################################################################
 
