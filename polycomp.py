@@ -7,8 +7,8 @@ algorithms.
 Usage:
     polycomp compress [--tables=LIST] [--debug] <schema_file> <output_file> [<key=value>...]
     polycomp decompress [--output=FILE] [--tables=LIST] [--one-hdu] <input_file>
-    polycomp (-h | --help)
-    polycomp --version
+    polycomp (help | -h | --help)
+    polycomp (version | --version)
 
 The <key=value> options specify substitutions for the values in the
 schema file.
@@ -892,9 +892,9 @@ def decompress_FITS_HDU(hdu):
         log.error('unknown compression method "%s"', exc.message)
         return None
 
-    log.info('decompressing table "%s" (compression type: %s)',
-             hdu.name, compression)
     samples, fmt = decompr_fn(hdu)
+    log.info('table "%s" decompressed (compression type: %s), first value is %s',
+             hdu.name, compression, str(samples[0]))
     # Convert the samples to their original NumPy type
     return np.asarray(samples, dtype=hdu.header['PCSRCTP']), fmt
 
