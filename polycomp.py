@@ -5,7 +5,7 @@
 algorithms.
 
 Usage:
-    polycomp compress [--tables=LIST] [--debug] <schema_file> <output_file> [<key=value>...]
+    polycomp compress [--tables=LIST] [--debug] [--log=FILE] <schema_file> <output_file> [<key=value>...]
     polycomp decompress [--output=FILE] [--tables=LIST] [--one-hdu] <input_file>
     polycomp (help | -h | --help)
     polycomp (version | --version)
@@ -18,7 +18,8 @@ Options:
     --version               Print the version number of the executable
     --debug                 When saving data compressed using the polynomial
                             compression, use an extended format that is easier
-                            to debug. This wastes some space (typically less than 10%). Moreover, if a
+                            to debug. This wastes some space (typically less than 10%).
+    --log=FILE              Write logging messages to the specified file, instead of stderr.
     -o FILE, --output=FILE  Specify the name of the output file
     --one-hdu               Save all the data in columns of the same HDU.
                             This only works if all the tables in <input_file>
@@ -969,10 +970,18 @@ def print_general_info():
 def main():
     "Main function"
 
-    log.basicConfig(level=log.DEBUG,
-                    format='polycomp: %(levelname)s - %(message)s')
     arguments = docopt(__doc__,
                        version='Polycomp {0}'.format(ppc.__version__))
+
+    log_file_name = None
+    log_file_mode = 'w' # Do not append
+    if arguments['--log']:
+        log_file_name = arguments['--log']
+
+    log.basicConfig(level=log.DEBUG,
+                    format='polycomp: %(levelname)s - %(message)s',
+                    filename=log_file_name,
+                    filemode=log_file_mode)
 
     print_general_info()
 
