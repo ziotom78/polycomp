@@ -58,8 +58,10 @@ def parse_intset(val):
 
     The integers must be comma-separated. Ranges in the form
     NN-MM or NN:MM are allowed: in this case, beware that the
-    last element is *always* included (unlike Python). See the
-    examples below.
+    last element is *always* included (unlike Python). It is
+    also possible to specify a step value through the syntax
+    START:STEP:STOP. In the latter case, the last element is
+    included whenever possible. See the examples below.
 
     Examples
     --------
@@ -67,8 +69,8 @@ def parse_intset(val):
     [10]
     >>> parse_intset("10")
     [10]
-    >>> parse_intset("10, 11, 14-16, 7")
-    [7, 10, 11, 14, 15, 16]
+    >>> parse_intset("10, 11, 14-16, 7, 5:2:15")
+    [5, 7, 9, 10, 11, 13, 14, 15, 16]
     """
 
     if type(val) in (int, long):
@@ -77,11 +79,20 @@ def parse_intset(val):
         # Parse the string
         chunks = val.split(',')
         result = set()
-        integer_re = re.compile('^[ \t]*[0-9]+[ \t]*$')
-        range_re = re.compile('^[ \t]*([0-9]+)[ \t]*[-:][ \t]*([0-9]+)[ \t]*$')
+        integer_re = re.compile('^[ \t]*\\d+[ \t]*$')
+        range_step_re = re.compile('^[ \t]*(\\d+)[ \t]*:[ \t]*(\\d+)[ \t]*:[ \t]*(\\d+)[ \t]*$')
+        range_re = re.compile('^[ \t]*(\\d+)[ \t]*[-:][ \t]*(\\d+)[ \t]*$')
         for chunk in chunks:
             if integer_re.match(chunk):
                 result.add(int(chunk))
+                continue
+
+            range_step_match = range_step_re.match(chunk)
+            if range_step_match:
+                result = result.union(np.arange(start=int(range_step_match.group(1)),
+                                                step=int(range_step_match.group(2)),
+                                                stop=int(range_step_match.group(3)) + 1,
+                                                dtype='int'))
                 continue
 
             range_match = range_re.match(chunk)
