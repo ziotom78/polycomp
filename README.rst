@@ -16,9 +16,9 @@ Requirements
    be installed
 
 3. The following Python libraries are required:
-   - `docopt`;
-   - `numpy`;
-   - `pyfits`.
+   - `click` (http://click.pocoo.org/5/);
+   - `numpy` (http://www.numpy.org/);
+   - `pyfits` (http://www.stsci.edu/institute/software_hardware/pyfits).
 
 **Note**: Recent versions of NumPy (1.10) seem to be incompatible with PyFits
 3.3: saving files will lead to strange assertion errors. NumPy 1.8.2 and PyFits
