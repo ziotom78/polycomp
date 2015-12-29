@@ -2,36 +2,11 @@
 # -*- mode: python -*-
 
 """Compress/decompress FITS files using polynomial compression and other
-algorithms.
+algorithms."""
 
-Usage:
-    polycomp compress [--tables=LIST] [--debug] [--log=FILE] <schema_file> <output_file> [<key=value>...]
-    polycomp decompress [--output=FILE] [--tables=LIST] [--one-hdu] <input_file>
-    polycomp (help | -h | --help)
-    polycomp (version | --version)
-
-The <key=value> options specify substitutions for the values in the
-schema file.
-
-Options:
-    -h, --help              Show this help
-    --version               Print the version number of the executable
-    --debug                 When saving data compressed using the polynomial
-                            compression, use an extended format that is easier
-                            to debug. This wastes some space (typically less than 10%).
-    --log=FILE              Write logging messages to the specified file, instead of stderr.
-    -o FILE, --output=FILE  Specify the name of the output file
-    --one-hdu               Save all the data in columns of the same HDU.
-                            This only works if all the tables in <input_file>
-                            have the same number of elements when decompressed.
-    -t LIST, --tables=LIST  Comma-separated list of tables to be (de)compressed.
-                            If this flag is not provided, all tables will be
-                            processed.
-"""
-
-from docopt import docopt
 from collections import namedtuple
 from datetime import datetime
+import click
 import itertools
 import os.path
 import sys
@@ -43,6 +18,7 @@ import logging as log
 import re
 import numpy as np
 import pyfits
+import warnings
 
 try:
     # Python 3
@@ -435,8 +411,13 @@ def parameter_space_survey(samples, num_of_coefficients_space,
     best_parameter_point = None
     best_chunks = None
     errors_in_param_space = []
-    for num_of_coeffs, samples_per_chunk in itertools.product(num_of_coefficients_space,
-                                                              samples_per_chunk_space):
+
+    configurations = list(itertools.product(num_of_coefficients_space,
+                                            samples_per_chunk_space))
+
+    for iter_idx, cur_conf in enumerate(configurations):
+        num_of_coeffs, samples_per_chunk = cur_conf
+
         params = ppc.Polycomp(num_of_samples=samples_per_chunk,
                               num_of_coeffs=num_of_coeffs,
                               max_allowable_error=max_error,
@@ -456,12 +437,14 @@ def parameter_space_survey(samples, num_of_coefficients_space,
 
         if must_explore_param_space(num_of_coefficients_space,
                                     samples_per_chunk_space):
-            message = ('  configuration with num_of_coefficients=%d, '
+            message = ('  configuration %d/%d with num_of_coefficients=%d, '
                        'samples_per_chunk=%d requires %s')
             if is_this_the_best:
                 message += ' (this is the best so far)'
 
             log.info(message,
+                     iter_idx + 1,
+                     len(configurations),
                      num_of_coeffs, samples_per_chunk,
                      humanize_size(cur_point.compr_data_size))
 
@@ -555,8 +538,7 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                                                   'Size of the encoded data [bytes]')
     if optimization_file_name is not None:
         hdu.header['PCOPTIM'] = (optimization_file_name,
-                                 'Path to the file with optimization '
-                                 'info')
+                                 'Optimization info file')
     return (hdu, best_parameter_point.compr_data_size)
 
 ########################################################################
@@ -709,66 +691,6 @@ def add_metadata_to_HDU(parser, hdu_header):
 
 ########################################################################
 
-def do_compress(arguments):
-    """This function is called when the user uses the command-line
-    'compress' command."""
-
-    schema_file_name = arguments['<schema_file>']
-    output_file_name = arguments['<output_file>']
-    table_list = arguments['--tables']
-    default_conf = {'clobber': 'True',
-                    'write_checksum': 'True'}
-    for key_val_pair in arguments['<key=value>']:
-        if '=' not in key_val_pair:
-            log.error('wrong key=value parameter "%s"', key_val_pair)
-            continue
-        key, value = key_val_pair.split('=', 1)
-        default_conf[key] = value
-
-    parser = configparser.ConfigParser(defaults=default_conf)
-
-    if arguments['--debug']:
-        debug_flag = True
-    else:
-        debug_flag = False
-
-    try:
-        if parser.read(schema_file_name) == []:
-            raise IOError(1, 'file not found')
-
-    except (OSError, IOError) as exc:
-        log.error('unable to load file "{0}": {1}'
-                  .format(schema_file_name, exc.strerror))
-
-    try:
-        tables = (parser.get('polycomp', 'tables')
-                  .replace(' ', '').split(','))
-        output_hdus = pyfits.HDUList()
-
-        for table in tables:
-            if (table_list is not None) and (table not in table_list):
-                continue
-
-            output_hdus.append(read_and_compress_table(parser, table,
-                                                       debug=debug_flag))
-
-        add_metadata_to_HDU(parser, output_hdus[0].header)
-        output_hdus.writeto(output_file_name,
-                            clobber=parser.getboolean('DEFAULT', 'clobber'),
-                            checksum=parser.getboolean('DEFAULT',
-                                                       'write_checksum'))
-        log.info('File "%s" written to disk', output_file_name)
-
-    except configparser.Error as exc:
-        log.error("invalid schema file \"{0}\": {1}"
-                  .format(schema_file_name, str(exc)))
-
-    except (IOError, OSError) as exc:
-        log.error('unable to write to file "%s": %s',
-                  output_file_name, str(exc))
-
-########################################################################
-
 def decompress_none(hdu):
     "Decompress an HDU which uses no compression"
 
@@ -912,59 +834,6 @@ def decompress_FITS_HDU(hdu):
 
 ########################################################################
 
-def do_decompress(arguments):
-    """This function is called when the user uses the command-line
-    'decompress' command."""
-
-    input_file_name = arguments['<input_file>']
-    output_file_name = arguments['--output']
-    table_list = arguments['--tables']
-    if output_file_name is None:
-        output_file_name = input_file_name + "-decompressed.fits"
-
-    one_hdu = arguments['--one-hdu']
-
-    if one_hdu:
-        list_of_tables = []
-    else:
-        list_of_tables = pyfits.HDUList([])
-
-    with pyfits.open(input_file_name) as input_file:
-        log.info('reading file "%s"', input_file_name)
-
-        for cur_hdu in input_file:
-            if type(cur_hdu) is not pyfits.BinTableHDU:
-                continue
-
-            if 'PCCOMPR' not in cur_hdu.header:
-                log.warning('HDU %s seems not to have been created by '
-                            'Polycomp, I will skip it',
-                            cur_hdu.name)
-                continue
-
-            if (table_list is not None) and cur_hdu.name not in table_list:
-                continue
-
-            samples, samples_format = decompress_FITS_HDU(cur_hdu)
-            if samples is None:
-                continue
-
-            cur_column = pyfits.Column(name=cur_hdu.name,
-                                       format=samples_format,
-                                       array=samples)
-            if one_hdu:
-                list_of_tables.append(cur_column)
-            else:
-                list_of_tables.append(pyfits.BinTableHDU.from_columns([cur_column]))
-
-    if one_hdu:
-        hdu = pyfits.BinTableHDU.from_columns(list_of_tables)
-        hdu.writeto(output_file_name, clobber=True)
-    else:
-        list_of_tables.writeto(output_file_name, clobber=True)
-
-########################################################################
-
 def print_general_info():
     import platform
 
@@ -978,32 +847,157 @@ def print_general_info():
 
 ########################################################################
 
-def main():
-    "Main function"
+@click.group()
+@click.version_option(version=ppc.__version__)
+@click.option('--log', 'log_file', type=click.Path(dir_okay=False),
+              metavar='FILE', default=None,
+              help='Write log messages to the specified file instead of stderr')
+@click.option('--log-append/--no-log-append', default=False,
+              help='If the file file specified via --log-file exists, \
+append log messages to its tail instead of emptying it')
+def main(log_file, log_append):
+    '''Compress/decompress FITS files containing data in tabular format.'''
 
-    arguments = docopt(__doc__,
-                       version='Polycomp {0}'.format(ppc.__version__))
-
-    log_file_name = None
-    log_file_mode = 'w' # Do not append
-    if arguments['--log']:
-        log_file_name = arguments['--log']
-
+    if log_append:
+        log_mode = 'a'
+    else:
+        log_mode = 'w'
     log.basicConfig(level=log.DEBUG,
                     format='polycomp: %(levelname)s - %(message)s',
-                    filename=log_file_name,
-                    filemode=log_file_mode)
+                    filename=log_file,
+                    filemode=log_mode)
 
     print_general_info()
 
-    if arguments['--version']:
-        print(ppc.__version__)
-    elif arguments['compress']:
-        do_compress(arguments)
-    elif arguments['decompress']:
-        do_decompress(arguments)
+################################################################################
+
+@main.command('compress')
+@click.argument('schema', type=click.Path(exists=True, dir_okay=False))
+@click.argument('output', type=click.Path(exists=False, dir_okay=False, writable=True))
+@click.argument('key-value', nargs=-1)
+@click.option('-t', '--table', 'table_list',
+              help='''Name of the tables to be compressed. It can be specified
+more than once. If this flag is not used, all tables in the schema file are
+processed.''',
+              default=None, metavar='NAME', multiple=True)
+@click.option('--debug/--no-debug', help='''When saving data compressed using the \
+polynomial compression, use an extended format that is easier to debug. This wastes \
+some space''')
+def compress(schema, output, table_list, debug, key_value):
+    '''Compress one or more HDUs from FITS files using the specified schema.'''
+
+    default_conf = {'clobber': 'True',
+                    'write_checksum': 'True'}
+    table_list = [x.upper() for x in table_list]
+    for key_val_pair in key_value:
+        if '=' not in key_val_pair:
+            log.error('wrong key=value parameter "%s"', key_val_pair)
+            continue
+        key, value = key_val_pair.split('=', 1)
+        default_conf[key] = value
+
+    parser = configparser.ConfigParser(defaults=default_conf)
+
+    try:
+        if parser.read(schema) == []:
+            raise IOError(1, 'file not found')
+
+    except (OSError, IOError) as exc:
+        log.error('unable to load file "{0}": {1}'
+                  .format(schema, exc.strerror))
+
+    try:
+        tables = (parser.get('polycomp', 'tables')
+                  .replace(' ', '').split(','))
+        output_hdus = pyfits.HDUList()
+
+        for cur_table in tables:
+            if (table_list is not None) and (len(table_list) > 0) \
+              and (cur_table.upper() not in table_list):
+                continue
+
+            output_hdus.append(read_and_compress_table(parser, cur_table,
+                                                       debug=debug))
+
+        if len(output_hdus) > 0:
+            add_metadata_to_HDU(parser, output_hdus[0].header)
+        else:
+            log.warning('no HDUs have been created')
+
+        output_hdus.writeto(output,
+                            clobber=parser.getboolean('DEFAULT', 'clobber'),
+                            checksum=parser.getboolean('DEFAULT',
+                                                       'write_checksum'))
+        log.info('File "%s" written to disk', output)
+
+    except configparser.Error as exc:
+        log.error("invalid schema file \"{0}\": {1}"
+                  .format(schema, str(exc)))
+
+    except (IOError, OSError) as exc:
+        log.error('unable create file "%s": %s',
+                  output, str(exc))
+
+################################################################################
+
+@main.command()
+@click.argument('input-file-name',
+                type=click.Path(exists=True, dir_okay=False))
+@click.argument('output-file-name',
+                type=click.Path(exists=False, dir_okay=False, writable=True))
+@click.option('-t', '--table', 'table_list', metavar='NAME', multiple=True, default=None,
+              help='Table to be decompressed. It can be repeated. If no --table \
+              flags are used, all tables are decompressed')
+@click.option('--one-hdu', is_flag=True,
+              help='Write all the tables as columns of the same HDU, instead of \
+              splitting them into multiple HDUs.')
+def decompress(input_file_name, output_file_name, table_list, one_hdu):
+    'Decompress a polycomp file into a FITS file.'
+
+    if one_hdu:
+        fits_tables = []
     else:
-        log.error('don''t know what to do')
+        fits_tables = pyfits.HDUList([])
+
+    table_list = [x.upper() for x in table_list]
+    with pyfits.open(input_file_name) as input_file:
+        log.info('reading file "%s"', input_file_name)
+
+        for cur_hdu in input_file:
+            if type(cur_hdu) is not pyfits.BinTableHDU:
+                continue
+
+            if 'PCCOMPR' not in cur_hdu.header:
+                log.warning('HDU %s seems not to have been created by '
+                            'Polycomp, I will skip it',
+                            cur_hdu.name)
+                continue
+
+            if (len(table_list) > 0) and (cur_hdu.name.upper() not in table_list):
+                continue
+
+            samples, samples_format = decompress_FITS_HDU(cur_hdu)
+            if samples is None:
+                continue
+
+            cur_column = pyfits.Column(name=cur_hdu.name,
+                                       format=samples_format,
+                                       array=samples)
+            if one_hdu:
+                fits_tables.append(cur_column)
+            else:
+                fits_tables.append(pyfits.BinTableHDU.from_columns([cur_column]))
+
+    if one_hdu:
+        hdu = pyfits.BinTableHDU.from_columns(fits_tables)
+        hdu.writeto(output_file_name, clobber=True)
+    else:
+        fits_tables.writeto(output_file_name, clobber=True)
+
+################################################################################
 
 if __name__ == "__main__":
+    # Turn off annoying (and useless) PyFits warnings
+    warnings.filterwarnings('ignore', category=UserWarning, append=True)
+
     main()
