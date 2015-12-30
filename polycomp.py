@@ -17,7 +17,6 @@ import pypolycomp as ppc
 import logging as log
 import re
 import numpy as np
-import pyfits
 import warnings
 
 try:
@@ -26,6 +25,17 @@ try:
 except ImportError:
     # Python 2
     import ConfigParser as configparser
+
+try:
+    import astropy.io.fits as pyfits
+    from astropy import __version__ as fits_lib_version
+
+    fits_lib = 'Astropy'
+except ImportError:
+    import pyfits
+
+    fits_lib = 'PyFits'
+    fits_lib_version = pyfits.__version__
 
 ########################################################################
 
@@ -837,12 +847,13 @@ def decompress_FITS_HDU(hdu):
 def print_general_info():
     import platform
 
-    log.info('Polycomp {ver} ({python} {pyver}, NumPy {npver}, PyFits {pfver})'
+    log.info('Polycomp {ver} ({python} {pyver}, NumPy {npver}, {fits_lib} {fitsver})'
              .format(ver=ppc.__version__,
                      python=platform.python_implementation(),
                      pyver=platform.python_version(),
                      npver=np.__version__,
-                     pfver=pyfits.__version__))
+                     fits_lib=fits_lib,
+                     fitsver=fits_lib_version))
 
 
 ########################################################################
@@ -862,10 +873,21 @@ def main(log_file, log_append):
         log_mode = 'a'
     else:
         log_mode = 'w'
-    log.basicConfig(level=log.DEBUG,
-                    format='polycomp: %(levelname)s - %(message)s',
-                    filename=log_file,
-                    filemode=log_mode)
+
+    log_fmt = 'polycomp: %(levelname)s - %(message)s'
+
+    # Without this "if", the code would fail with the ValueError
+    # exception "Unrecognised argument(s): filemode" when "log_file"
+    # is not specified. This happens for some old Python versions
+    # (http://bugs.python.org/issue23207).
+    if log_file:
+        log.basicConfig(level=log.DEBUG,
+                        format=log_fmt,
+                        filename=log_file,
+                        filemode=log_mode)
+    else:
+        log.basicConfig(level=log.DEBUG,
+                        format=log_fmt)
 
     print_general_info()
 

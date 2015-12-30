@@ -18,7 +18,9 @@ Requirements
 3. The following Python libraries are required:
    - `click` (http://click.pocoo.org/5/);
    - `numpy` (http://www.numpy.org/);
-   - `pyfits` (http://www.stsci.edu/institute/software_hardware/pyfits).
+   - Either `astropy` (version 0.4 or greater, http://www.astropy.org/) or
+     `pyfits` (http://www.stsci.edu/institute/software_hardware/pyfits). (The
+     `setup.py` script installs Astropy.)
 
 **Note**: Recent versions of NumPy (1.10) seem to be incompatible with PyFits
 3.3: saving files will lead to strange assertion errors. NumPy 1.8.2 and PyFits
