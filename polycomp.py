@@ -8,6 +8,7 @@ from collections import namedtuple
 from datetime import datetime
 import click
 import itertools
+import numbers
 import os.path
 import sys
 import time
@@ -59,9 +60,9 @@ def parse_intset(val):
     [5, 7, 9, 10, 11, 13, 14, 15, 16]
     """
 
-    if type(val) in (int, long):
+    if isinstance(val, numbers.Integral):
         return [val]
-    elif type(val) is str:
+    elif isinstance(val, str):
         # Parse the string
         chunks = val.split(',')
         result = set()
