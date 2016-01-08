@@ -410,10 +410,6 @@ def parameter_space_survey(samples, num_of_coefficients_space,
     space given by "num_of_coefficients_space" and
     "samples_per_chunk_space"."""
 
-    best_size = None
-    best_parameter_point = None
-    best_chunks = None
-
     configurations = list(itertools.product(num_of_coefficients_space,
                                             samples_per_chunk_space))
 
@@ -426,32 +422,17 @@ def parameter_space_survey(samples, num_of_coefficients_space,
 
         chunks, cur_point = param_points.get_point(num_of_coeffs, samples_per_chunk)
 
-        is_this_the_best = False
-        if best_size is None or best_size > cur_point.compr_data_size:
-            best_size = cur_point.compr_data_size
-            best_parameter_point = cur_point
-            best_chunks = chunks
-            is_this_the_best = True
-
         if must_explore_param_space(num_of_coefficients_space,
                                     samples_per_chunk_space):
-            message = ('  configuration %d/%d with num_of_coefficients=%d, '
-                       'samples_per_chunk=%d requires %s')
-            if is_this_the_best:
-                message += ' (this is the best so far)'
-
-            log.info(message,
+            log.info('configuration %d/%d with num_of_coefficients=%d, '
+                     'samples_per_chunk=%d requires %s',
                      iter_idx + 1,
                      len(configurations),
                      num_of_coeffs, samples_per_chunk,
                      humanize_size(cur_point.compr_data_size))
 
-    if best_chunks is None:
-        log.error('polynomial compression parameters expected for table "%s"',
-                  table)
-        sys.exit(1)
-
-    return best_parameter_point, list(param_points.parameter_space.values())
+    best_chunks, best_point = param_points.best_point
+    return best_point, list(param_points.parameter_space.values())
 
 ################################################################################
 
