@@ -215,16 +215,16 @@ cdef extern from "libpolycomp.h":
     ctypedef struct pcomp_polycomp_chunk_t:
         pass
 
-    pcomp_polycomp_chunk_t* pcomp_init_chunk(pcomp_chunk_size_t num_of_samples);
+    pcomp_polycomp_chunk_t* pcomp_init_chunk(pcomp_chunk_size_t num_of_samples)
     pcomp_polycomp_chunk_t* pcomp_init_uncompressed_chunk(pcomp_chunk_size_t num_of_samples,
-                                                          double* samples);
+                                                          double* samples)
     pcomp_polycomp_chunk_t* pcomp_init_compressed_chunk(pcomp_chunk_size_t num_of_samples,
                                                         pcomp_poly_size_t num_of_poly_coeffs,
                                                         const double* poly_coeffs,
                                                         pcomp_chunk_size_t num_of_cheby_coeffs,
                                                         const uint8_t* cheby_mask,
                                                         const double* cheby_coeffs)
-    void pcomp_free_chunk(pcomp_polycomp_chunk_t* chunk);
+    void pcomp_free_chunk(pcomp_polycomp_chunk_t* chunk)
 
     pcomp_chunk_size_t pcomp_chunk_num_of_samples(pcomp_polycomp_chunk_t* chunk)
     size_t pcomp_chunk_num_of_bytes(pcomp_polycomp_chunk_t* chunk)

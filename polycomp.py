@@ -324,26 +324,18 @@ def polycomp_chunks_to_FITS_table(chunks, params):
 
     return hdu
 
-################################################################################
-
-def default_optimization_file_name(table_name):
-    date = datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S")
-    return ('optimization_{date}_{table_name}.fits'.format(table_name=table_name,
-                                                           date=date))
-
 ########################################################################
 
-def save_polycomp_parameter_space(errors_in_param_space,
+def save_polycomp_parameter_space(parameter_space,
                                   file_name,
                                   uncompressed_size,
-                                  table_name,
-                                  num_of_coefficients,
-                                  samples_per_chunk):
+                                  table_name):
     """Save the table used for the optimization of the polycomp parameters
 
     Save the points in the parameter space that have been sampled for
     the optimization of the polynomial compression in a FITS file. The
-    value "uncompressed_size" is the size in bytes of the uncompressed
+    variable "parameter_space" must be a list of ppc.ParameterPoint objects.
+    The value "uncompressed_size" is the size in bytes of the uncompressed
     data, and it is used to compute the compression ratios.
 
     The variables "num_of_coefficients" and "samples_per_chunk" are
@@ -352,38 +344,38 @@ def save_polycomp_parameter_space(errors_in_param_space,
     Return the name of the FITS file that has been created by the function."""
 
     # Build the matrices
-    mat_samples_per_chunk, mat_num_of_coeffs = np.meshgrid(samples_per_chunk,
-                                                           num_of_coefficients)
+    mesh = ppc.get_param_space_mesh(parameter_space)
 
     hdu_list = [pyfits.PrimaryHDU(),
                 pyfits.ImageHDU(name='SMPPERCK',
-                                data=mat_samples_per_chunk),
+                                data=mesh.samples_per_chunk),
                 pyfits.ImageHDU(name='NUMCOEFS',
-                                data=mat_num_of_coeffs)]
+                                data=mesh.num_of_poly_coeffs)]
     hdu_list[0].header['TBLNAME'] = (table_name,
                                      'The parameter that has been compressed')
     hdu_list[0].header['UNCSIZE'] = (uncompressed_size,
                                      'Size of the uncompressed data [bytes]')
-    hdu_list[0].header['MAXERR'] = (errors_in_param_space[0].params.max_error(),
+    # We take the first element of parameter_space because we assume
+    # they all have the same max_error value
+    hdu_list[0].header['MAXERR'] = (parameter_space[0].params.max_error(),
                                     'Maximum allowable error')
-    hdu_list[0].header['ALGOR'] = (errors_in_param_space[0].params.algorithm(),
+    hdu_list[0].header['ALGOR'] = (parameter_space[0].params.algorithm(),
                                    'Type of compression algorithm')
 
-    period = errors_in_param_space[0].params.period()
+    period = parameter_space[0].params.period()
     if period is None:
         period = 0.0
-    hdu_list[0].header['PERIOD'] = (period, 'Periodicity of the variable (0=none)')
+    hdu_list[0].header['PERIOD'] = (period,
+                                    'Periodicity of the variable (0=none)')
 
-    for (vector, hdu_name, fmt) in [('compr_data_size', 'COMPRSIZ', 'J'),
-                                    ('cr', 'CR', 'E'),
-                                    ('num_of_chunks', 'NUMCK', 'J'),
-                                    ('num_of_compr_chunks', 'NUMCRCK', 'J'),
-                                    ('num_of_cheby_coeffs', 'NCHEBYC', 'J'),
-                                    ('elapsed_time', 'TIME', 'E')]:
-        matr = np.reshape([x.__dict__[vector] for x in errors_in_param_space],
-                          (len(num_of_coefficients), len(samples_per_chunk)))
+    for (field_name, hdu_name) in [('compr_data_size', 'COMPRSIZ'),
+                                   ('cr', 'CR'),
+                                   ('num_of_chunks', 'NUMCK'),
+                                   ('num_of_compr_chunks', 'NUMCRCK'),
+                                   ('num_of_cheby_coeffs', 'NCHEBYC'),
+                                   ('elapsed_time', 'TIME')]:
         hdu_list.append(pyfits.ImageHDU(name=hdu_name,
-                                        data=matr))
+                                        data=mesh.__dict__[field_name]))
 
     log.info('writing optimization information in file %s',
              os.path.abspath(file_name))
@@ -421,23 +413,18 @@ def parameter_space_survey(samples, num_of_coefficients_space,
     best_size = None
     best_parameter_point = None
     best_chunks = None
-    errors_in_param_space = []
 
     configurations = list(itertools.product(num_of_coefficients_space,
                                             samples_per_chunk_space))
 
+    param_points = ppc.PointCache(samples=samples,
+                                  max_allowable_error=max_error,
+                                  algorithm=algorithm,
+                                  period=period)
     for iter_idx, cur_conf in enumerate(configurations):
         num_of_coeffs, samples_per_chunk = cur_conf
 
-        params = ppc.Polycomp(num_of_samples=samples_per_chunk,
-                              num_of_coeffs=num_of_coeffs,
-                              max_allowable_error=max_error,
-                              algorithm=algorithm)
-        if period is not None:
-            params.set_period(period)
-
-        chunks, cur_point = ppc.sample_polycomp_configuration(samples, params)
-        errors_in_param_space.append(cur_point)
+        chunks, cur_point = param_points.get_point(num_of_coeffs, samples_per_chunk)
 
         is_this_the_best = False
         if best_size is None or best_size > cur_point.compr_data_size:
@@ -464,7 +451,7 @@ def parameter_space_survey(samples, num_of_coefficients_space,
                   table)
         sys.exit(1)
 
-    return best_parameter_point, errors_in_param_space
+    return best_parameter_point, list(param_points.parameter_space.values())
 
 ################################################################################
 
@@ -492,42 +479,50 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
     exhaustive_search = parser.has_option(table, 'exhaustive_search') and \
                         parser.getboolean(table, 'exhaustive_search')
 
-    # Loop over the set of parameters to find the best one
     if exhaustive_search:
-        best_parameter_point, errors_in_param_space = \
+        # Scan the whole grid of parameters
+        best_parameter_point, parameter_space = \
             parameter_space_survey(samples, num_of_coefficients_space,
                                    samples_per_chunk_space,
                                    max_error, algorithm, period)
     else:
+        # Do a smart search
         num_of_coeffs_range = [f(num_of_coefficients_space) for f in (np.min, np.max)]
         samples_per_chunk_range = [f(samples_per_chunk_space) for f in (np.min, np.max)]
+
+        delta_coeffs, delta_samples = (1, 1)
+        max_iterations = 0
+        if parser.has_option(table, 'opt_delta_coeffs'):
+            delta_coeffs = parser.getint(table, 'opt_delta_coeffs')
+        if parser.has_option(table, 'opt_delta_samples'):
+            delta_samples = parser.getint(table, 'opt_delta_samples')
+        if parser.has_option(table, 'opt_max_num_of_iterations'):
+            max_iterations = parser.getint(table, 'opt_max_num_of_iterations')
 
         callback = (lambda x, y, params, steps: \
                     log.debug("Point (%d, %d) sampled (step %d), size is %s",
                               x, y, steps, humanize_size(params.compr_data_size)))
-        best_parameter_point, errors_in_param_space, num_of_steps = \
+        best_parameter_point, parameter_space, num_of_steps = \
             ppc.find_best_polycomp_parameters(samples, num_of_coeffs_range,
                                               samples_per_chunk_range,
-                                              max_error, algorithm, period, callback)
+                                              max_error=max_error,
+                                              algorithm=algorithm,
+                                              delta_coeffs=delta_coeffs,
+                                              delta_samples=delta_samples,
+                                              period=period,
+                                              callback=callback,
+                                              max_iterations=max_iterations)
         log.debug("Best configuration found in %d iterations", num_of_steps)
 
     optimization_file_name = None
-    if must_explore_param_space(num_of_coefficients_space,
-                                samples_per_chunk_space) and \
-       exhaustive_search:
 
-        if parser.has_option(table, 'optimization_file_name'):
-            file_name = parser.get(table, 'optimization_file_name')
-        else:
-            file_name = default_optimization_file_name(table)
-
+    if parser.has_option(table, 'optimization_file_name'):
+        file_name = parser.get(table, 'optimization_file_name')
         optimization_file_name = \
-            save_polycomp_parameter_space(errors_in_param_space,
+            save_polycomp_parameter_space(parameter_space,
                                           file_name,
                                           uncompressed_size=numpy_array_size(samples),
-                                          table_name=table,
-                                          num_of_coefficients=num_of_coefficients_space,
-                                          samples_per_chunk=samples_per_chunk_space)
+                                          table_name=table)
 
     if must_explore_param_space(num_of_coefficients_space,
                                 samples_per_chunk_space):

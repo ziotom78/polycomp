@@ -16,6 +16,79 @@ ParameterPoint = namedtuple('ParameterPoint',
                              'cr',
                              'elapsed_time'])
 
+ParameterSpaceMesh = namedtuple('ParameterSpaceMesh',
+                                ['samples_per_chunk',
+                                 'num_of_poly_coeffs',
+                                 'compr_data_size',
+                                 'num_of_chunks',
+                                 'num_of_compr_chunks',
+                                 'num_of_cheby_coeffs',
+                                 'cr',
+                                 'elapsed_time'])
+
+################################################################################
+
+def copy_param_point_without_chunks(parameter_point):
+    import logging as log
+    from sys import getsizeof
+
+    newcopy = ParameterPoint(chunks=None,
+                             params=parameter_point.params,
+                             compr_data_size=parameter_point.compr_data_size,
+                             num_of_chunks=parameter_point.num_of_chunks,
+                             num_of_compr_chunks=parameter_point.num_of_compr_chunks,
+                             num_of_cheby_coeffs=parameter_point.num_of_cheby_coeffs,
+                             cr=parameter_point.cr,
+                             elapsed_time=parameter_point.elapsed_time)
+
+    return newcopy
+
+################################################################################
+
+def get_param_space_mesh(parameter_point_list):
+    '''Return a mesh grid containing'''
+
+    # Remove duplicates and sort the values along the X and Y axes
+    samples_per_chunk = np.array(sorted(set([x.params.samples_per_chunk()
+                                             for x in parameter_point_list])))
+    num_of_poly_coeffs = np.array(sorted(set([x.params.num_of_poly_coeffs()
+                                              for x in parameter_point_list])))
+
+    # We assign this to two short-named variables `x` and `y` because
+    # we're going to use them quite often below
+    x, y = np.meshgrid(samples_per_chunk, num_of_poly_coeffs)
+
+    # At the beginning, the parameter space is zero everywhere. We're
+    # going to fill it in the `for` loop below
+    mesh = ParameterSpaceMesh(samples_per_chunk=x,
+                              num_of_poly_coeffs=y,
+                              compr_data_size=np.zeros(x.shape, dtype='int'),
+                              num_of_chunks=np.zeros(x.shape, dtype='int'),
+                              num_of_compr_chunks=np.zeros(x.shape, dtype='int'),
+                              num_of_cheby_coeffs=np.zeros(x.shape, dtype='int'),
+                              cr=np.zeros(x.shape, dtype='float'),
+                              elapsed_time=np.zeros(x.shape, dtype='float'))
+
+    import logging as log
+    for cur_point in parameter_point_list:
+        # Find the position of the current point in the mesh grid
+        idx_x = np.clip(np.searchsorted(x[0], cur_point.params.samples_per_chunk()),
+                        0, len(x[0]) - 1)
+        idx_y = np.clip(np.searchsorted(y[0], cur_point.params.num_of_poly_coeffs()),
+                        0, len(y[0]) - 1)
+
+        # Copy the parameters of the current point in each of the 2D
+        # matrices in `mesh`
+        for param in ('compr_data_size',
+                      'num_of_chunks',
+                      'num_of_compr_chunks',
+                      'num_of_cheby_coeffs',
+                      'cr',
+                      'elapsed_time'):
+            mesh.__dict__[param][idx_y, idx_x] = cur_point.__dict__[param]
+
+    return mesh
+
 ################################################################################
 
 def numpy_array_size(arr):
@@ -57,7 +130,15 @@ class PointCache:
         self.algorithm = algorithm
         self.period = period
         self.num_of_elements = num_of_elements_in_cache
+        # This dictionary is going to keep `self.num_of_elements` items at most
         self.cache = OrderedDict()
+
+        # This is going to contain all elements in `self.cache`, but
+        # its size has no upper boundary. The `ParameterPoint.chunks`
+        # however is equal to None, in order to save memory. This
+        # field is used to do a post-mortem analysis of the
+        # convergence.
+        self.parameter_space = {}
 
         self.best_point = None
         self.best_size = None
@@ -81,15 +162,15 @@ class PointCache:
         # If it is already present, delete it so that it will be
         # readded at the end of the list (with higher priority)
         if (x, y) in self.cache:
-            new_point = self.cache[(x, y)]
-            del self.cache[(x, y)]
+            new_point = self.cache.pop((x, y))
         else:
             new_point = self.compute_point(x, y)
 
         if len(self.cache) >= self.num_of_elements:
-            del self.cache[self.cache.keys()[0]]
+            self.cache.popitem(last=False)
 
         self.cache[(x, y)] = new_point
+        self.parameter_space[(x, y)] = copy_param_point_without_chunks(new_point[1])
         return new_point
 
     def get_point(self, x, y):
@@ -103,7 +184,7 @@ class PointCache:
 def find_best_polycomp_parameters(samples, num_of_coefficients_range,
                                   samples_per_chunk_range, max_error,
                                   algorithm, delta_coeffs=1, delta_samples=1,
-                                  period=None, callback=None):
+                                  period=None, callback=None, max_iterations=0):
 
     """Performs an optimized search of the best configuration in the
     parameter space given by "num_of_coefficients_space" and
@@ -131,7 +212,6 @@ def find_best_polycomp_parameters(samples, num_of_coefficients_range,
     # "PointCache" object to do all the sampling, so that only newer
     # points need to be recalculated every time.
 
-    errors_in_param_space = {}
     num_of_steps = 1
     dx = delta_coeffs
     dy = delta_samples
@@ -153,15 +233,36 @@ def find_best_polycomp_parameters(samples, num_of_coefficients_range,
             if callback is not None:
                 callback(cur_x, cur_y, params, num_of_steps)
 
-            errors_in_param_space[(cur_x, cur_y)] = params
             ring_of_configurations.append((cur_x, cur_y, chunks, params))
 
         ring_of_configurations.sort(key=lambda p: p[3].compr_data_size)
         best_x, best_y, best_chunks, best_params = ring_of_configurations[0]
-        if (best_x, best_y) == (midpoint_x, midpoint_y):
+
+        # If we have ran too much iterations, stop bothering and exit the loop
+        num_of_steps += 1
+        if (max_iterations > 0) and num_of_steps > max_iterations:
             break
 
-        midpoint_x, midpoint_y = best_x, best_y
-        num_of_steps += 1
+        # If we're centered on the best value, let's explore a
+        # narrower space around it
+        if (best_x, best_y) == (midpoint_x, midpoint_y):
+            repeat = False
 
-    return best_params, errors_in_param_space.values(), num_of_steps
+            if dx > 1:
+                dx = dx // 2
+                repeat = True
+
+            if dy > 1:
+                dy = dy // 2
+                repeat = True
+
+            if repeat:
+                continue
+            else:
+                break
+
+        midpoint_x, midpoint_y = best_x, best_y
+
+    return (best_params,
+            list(param_points.parameter_space.values()),
+            num_of_steps)

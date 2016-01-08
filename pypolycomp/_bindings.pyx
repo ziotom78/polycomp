@@ -452,6 +452,12 @@ cdef class PolycompChunk:
             cpc.pcomp_free_chunk(self._c_chunk)
             self._c_chunk = NULL
 
+    def __sizeof__(self):
+        if self._c_chunk != NULL:
+            return cpc.pcomp_chunk_num_of_bytes(self._c_chunk)
+        else:
+            return 0
+
     def num_of_samples(self):
         return cpc.pcomp_chunk_num_of_samples(self._c_chunk)
 
@@ -570,6 +576,9 @@ cdef class PolycompChunkArray:
 
     def __dealloc__(PolycompChunkArray self):
         cpc.pcomp_free_chunks(self._c_array, self.num_of_chunks)
+
+    def __sizeof__(self):
+        return self.num_of_bytes()
 
     def __len__(PolycompChunkArray self):
         return self.num_of_chunks
