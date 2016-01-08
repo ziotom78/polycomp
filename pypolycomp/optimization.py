@@ -102,7 +102,8 @@ class PointCache:
 
 def find_best_polycomp_parameters(samples, num_of_coefficients_range,
                                   samples_per_chunk_range, max_error,
-                                  algorithm, period=None, callback=None):
+                                  algorithm, delta_coeffs=1, delta_samples=1,
+                                  period=None, callback=None):
 
     """Performs an optimized search of the best configuration in the
     parameter space given by "num_of_coefficients_space" and
@@ -132,10 +133,12 @@ def find_best_polycomp_parameters(samples, num_of_coefficients_range,
 
     errors_in_param_space = {}
     num_of_steps = 1
+    dx = delta_coeffs
+    dy = delta_samples
     while True:
-        ring_of_points = [(-1, -1), (0, -1), (1, -1),
-                          (-1,  0), (0,  0), (1,  0),
-                          (-1,  1), (0,  1), (1,  1)]
+        ring_of_points = [(-dx, -dy), (0, -dy), (dx, -dy),
+                          (-dx,   0), (0,   0), (dx,   0),
+                          (-dx,  dy), (0,  dy), (dx,  dy)]
 
         ring_of_configurations = []
         for dx, dy in ring_of_points:
