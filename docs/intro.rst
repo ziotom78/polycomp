@@ -138,7 +138,31 @@ content::
   datatype = int8
 
 This file describes the way input data will be compressed by
-``polycomp``.
+``polycomp``. Run the program with the following syntax::
+
+  polycomp.py compress pcomp_LFI27M.conf compressed.pcomp
+
+This command will produce a file named ``compressed.pcomp``, which
+contains the six compressed columns of data specified in the
+configuration file. The file format used for ``compressed.pcomp`` is
+based on the FITS standard, and you can therefore use any FITS
+library/program to access its data. (Of course, to actually decompress
+the data in it you must use ``libpolycomp``.)
+
 
 Decompressing files using polycomp
 ----------------------------------
+
+Decompression is considerably simpler than compression, as it does not
+require to prepare a configuration file. You have to specify the input
+``.pcomp`` file and the output FITS file, as in the following
+example::
+
+  polycomp.py decompress compressed.pcomp decompressed.fits
+
+By default, ``polycomp`` will save every column of data in a separated
+HDU file within ``decompressed.fits``. If all the columns in
+``compressed.pcomp`` are of the same length, you can use the
+``--one-hdu`` flag to save everything in one HDU::
+
+  polycomp.py decompress --one-hdu compressed.pcomp decompressed.fits

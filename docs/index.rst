@@ -13,6 +13,7 @@ Contents:
 
    how-to-get-it
    intro
+   configuration-files
 
 Indices and tables
 ==================
