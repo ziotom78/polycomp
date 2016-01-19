@@ -74,7 +74,7 @@ def get_param_space_mesh(parameter_point_list):
         # Find the position of the current point in the mesh grid
         idx_x = np.clip(np.searchsorted(x[0], cur_point.params.samples_per_chunk()),
                         0, len(x[0]) - 1)
-        idx_y = np.clip(np.searchsorted(y[0], cur_point.params.num_of_poly_coeffs()),
+        idx_y = np.clip(np.searchsorted(y[:,0], cur_point.params.num_of_poly_coeffs()),
                         0, len(y[0]) - 1)
 
         # Copy the parameters of the current point in each of the 2D
@@ -247,13 +247,15 @@ def find_best_polycomp_parameters(samples, num_of_coefficients_range,
         # narrower space around it
         if (best_x, best_y) == (midpoint_x, midpoint_y):
             repeat = False
+            # Can the ring be shrunk any further? If so, shrink it and
+            # keep iterating
+            if (dx > 1) or (dy > 1):
+                # If dx == dy, we prefer to reduce dy first
+                if dy > dx:
+                    dy = dy // 2
+                else:
+                    dx = dx // 2
 
-            if dx > 1:
-                dx = dx // 2
-                repeat = True
-
-            if dy > 1:
-                dy = dy // 2
                 repeat = True
 
             if repeat:
@@ -264,5 +266,105 @@ def find_best_polycomp_parameters(samples, num_of_coefficients_range,
         midpoint_x, midpoint_y = best_x, best_y
 
     return (best_params,
+            list(param_points.parameter_space.values()),
+            num_of_steps)
+
+
+################################################################################
+
+SimplexVertex = namedtuple('SimplexVertex', 'x y value')
+
+def new_vertex(point_cache, coords, callback):
+    chunks, params = point_cache.get_point(*coords)
+    if callback is not None:
+        callback(coords[0], coords[1], params, 0)
+
+    return SimplexVertex(coords[0], coords[1], params.compr_data_size)
+
+def vertex_point(vertex):
+    'Return a 2D point suitable for operations with NumPy operators'
+    return np.array([int(np.round(vertex.x)), int(np.round(vertex.y))], dtype='float')
+
+def simplex_downhill(samples, num_of_coefficients_range,
+                     samples_per_chunk_range, max_error,
+                     algorithm, delta_coeffs=1, delta_samples=1,
+                     period=None, callback=None, max_iterations=0):
+
+    """Performs an optimized search of the best configuration in the
+    parameter space given by "num_of_coefficients_space" and
+    "samples_per_chunk_space" using the Nelder-Mead algorithm (AKA downhill
+    simplex algorithm)."""
+
+    optimization_start_time = time.clock()
+
+    x_range = num_of_coefficients_range
+    y_range = samples_per_chunk_range
+
+    midpoint_x, midpoint_y = [int(np.mean(k)) for k in (x_range, y_range)]
+    param_points = PointCache(samples=samples,
+                              max_allowable_error=max_error,
+                              algorithm=algorithm,
+                              period=period)
+
+    num_of_steps = 1
+    dx = delta_coeffs
+    dy = delta_samples
+    alpha = 1.0
+    gamma = 2.0
+    rho = 0.5
+    sigma = 0.5
+    vertexes = [new_vertex(param_points, (midpoint_x, midpoint_y), callback),
+                new_vertex(param_points, (midpoint_x + dx, midpoint_y), callback),
+                new_vertex(param_points, (midpoint_x, midpoint_y + dy), callback)]
+    step_num = 1
+    while True:
+        # 1 - Order
+        vertexes.sort(key=lambda x: x.value)
+        vertex_points = [vertex_point(v) for v in vertexes]
+
+        # Check if there are two points that are the same. If it is so, quit
+        if np.all(vertex_points[0] == vertex_points[1]) or \
+           np.all(vertex_points[1] == vertex_points[2]):
+           break
+
+        if max_iterations > 0 and step_num > max_iterations:
+           break
+
+        step_num += 1
+        # 2 - Centroid
+        centroid = np.array([(vertexes[0].x + vertexes[1].x) * 0.5,
+                             (vertexes[0].y + vertexes[1].y) * 0.5])
+
+        # 3 - Reflection
+        reflected_point = centroid + alpha * (centroid - vertex_points[2])
+        reflected_vertex = new_vertex(param_points, reflected_point, callback)
+        if (vertexes[0].value < reflected_vertex.value) and \
+          (reflected_vertex.value < vertexes[1].value):
+            vertexes[2] = reflected_vertex
+            continue
+
+        # 4 - Expansion
+        if reflected_vertex.value < vertexes[0].value:
+            expanded_point = reflected_point + gamma * (reflected_point - centroid)
+            expanded_vertex = new_vertex(param_points, expanded_point, callback)
+            if expanded_vertex.value < reflected_vertex.value:
+                vertexes[2] = expanded_vertex
+                continue
+            else:
+                vertexes[2] = reflected_vertex
+
+        # 5 - Contraction
+        contracted_point = centroid + rho * (vertex_points[2] - centroid)
+        contracted_vertex = new_vertex(param_points, contracted_point, callback)
+        if contracted_vertex.value < vertexes[2].value:
+            vertexes[2] = contracted_vertex
+            continue
+
+        # 6 - Reduction
+        for i in (1, 2):
+            new_point = vertex_points[0] + sigma * (vertex_points[i] - vertex_points[0])
+            vertexes[i] = new_vertex(param_points, new_point, callback)
+
+    return (param_points.best_point[1],
             list(param_points.parameter_space.values()),
             num_of_steps)
