@@ -457,8 +457,8 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
     else:
         period = None
 
-    exhaustive_search = parser.has_option(table, 'exhaustive_search') and \
-                        parser.getboolean(table, 'exhaustive_search')
+    exhaustive_search = parser.has_option(table, 'no_smart_optimization') and \
+                        parser.getboolean(table, 'no_smart_optimization')
 
     if exhaustive_search:
         # Scan the whole grid of parameters
@@ -484,15 +484,15 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
                     log.debug("Point (%d, %d) sampled (step %d), size is %s",
                               x, y, steps, humanize_size(params.compr_data_size)))
         best_parameter_point, parameter_space, num_of_steps = \
-            ppc.find_best_polycomp_parameters(samples, num_of_coeffs_range,
-                                              samples_per_chunk_range,
-                                              max_error=max_error,
-                                              algorithm=algorithm,
-                                              delta_coeffs=delta_coeffs,
-                                              delta_samples=delta_samples,
-                                              period=period,
-                                              callback=callback,
-                                              max_iterations=max_iterations)
+            ppc.simplex_downhill(samples, num_of_coeffs_range,
+                                 samples_per_chunk_range,
+                                 max_error=max_error,
+                                 algorithm=algorithm,
+                                 delta_coeffs=delta_coeffs,
+                                 delta_samples=delta_samples,
+                                 period=period,
+                                 callback=callback,
+                                 max_iterations=max_iterations)
         log.debug("Best configuration found in %d iterations", num_of_steps)
 
     optimization_file_name = None
