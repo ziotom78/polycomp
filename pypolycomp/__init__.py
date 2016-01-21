@@ -5,7 +5,7 @@ import numpy as np
 from pypolycomp._bindings import *
 from pypolycomp.optimization import *
 
-__version__ = "1.0"
+from pypolycomp.version import __version__
 
 class PolycompError(Exception):
     "Generic Polycomp error"

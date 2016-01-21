@@ -19,6 +19,7 @@ import logging as log
 import re
 import numpy as np
 import warnings
+from pypolycomp import __version__
 
 try:
     # Python 3
@@ -825,7 +826,7 @@ def print_general_info():
     import platform
 
     log.info('Polycomp {ver} ({python} {pyver}, NumPy {npver}, {fits_lib} {fitsver})'
-             .format(ver=ppc.__version__,
+             .format(ver=__version__,
                      python=platform.python_implementation(),
                      pyver=platform.python_version(),
                      npver=np.__version__,
@@ -836,7 +837,7 @@ def print_general_info():
 ########################################################################
 
 @click.group()
-@click.version_option(version=ppc.__version__)
+@click.version_option(version=__version__)
 @click.option('--log', 'log_file', type=click.Path(dir_okay=False),
               metavar='FILE', default=None,
               help='Write log messages to the specified file instead of stderr')

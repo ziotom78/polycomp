@@ -6,6 +6,11 @@ from setuptools.extension import Extension
 import os.path as path
 from distutils.version import LooseVersion as Version
 
+here = path.abspath(path.dirname(__file__))
+
+with open(path.join(here, 'pypolycomp', 'version.py'), encoding='utf-8') as f:
+    exec(f.read())
+
 try:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
@@ -17,8 +22,10 @@ else:
 
 
 if use_cython:
+    print('using cython')
     cython_ext = '.pyx'
 else:
+    print('NOT using cython')
     cython_ext = '.c'
 
 modules = [Extension("pypolycomp._bindings",
@@ -36,14 +43,14 @@ if use_cython:
     modules = cythonize(modules)
 
 setup(name="polycomp",
-      version="1.0",
+      version=__version__,
       author="Maurizio Tomasi",
       author_email="ziotom78@gmail.com",
       description="Python bindings to the libpolycomp C library",
       long_description=long_description,
       license="MIT",
-      url="",
-      install_requires=["cython >= 0.18", "astropy >= 0.4", "click"],
+      url="https://github.com/ziotom78/polycomp",
+      install_requires=["cython >= 0.18", "numpy >= 1.8.2", "astropy >= 0.4", "click"],
       ext_modules=modules,
       scripts=['polycomp.py'],
       packages=['pypolycomp'],
@@ -53,6 +60,7 @@ setup(name="polycomp",
           'Intended Audience :: Science/Research',
           'Topic :: System :: Archiving :: Compression',
           'License :: OSI Approved :: MIT License',
+          'Operating System :: POSIX',
           'Programming Language :: Python :: 2',
           'Programming Language :: Python :: 2.7',
           'Programming Language :: Python :: 3',
