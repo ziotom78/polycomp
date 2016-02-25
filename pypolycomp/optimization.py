@@ -337,6 +337,9 @@ def simplex_downhill(samples, num_of_coefficients_range,
 
         # 3 - Reflection
         reflected_point = centroid + alpha * (centroid - vertex_points[2])
+        if reflected_point.x < 1 or reflected_point.y < 1:
+            break
+
         reflected_vertex = new_vertex(param_points, reflected_point, callback)
         if (vertexes[0].value < reflected_vertex.value) and \
           (reflected_vertex.value < vertexes[1].value):
@@ -355,6 +358,8 @@ def simplex_downhill(samples, num_of_coefficients_range,
 
         # 5 - Contraction
         contracted_point = centroid + rho * (vertex_points[2] - centroid)
+        if contracted_point.x < 1 or contracted_point.y < 1:
+            break
         contracted_vertex = new_vertex(param_points, contracted_point, callback)
         if contracted_vertex.value < vertexes[2].value:
             vertexes[2] = contracted_vertex
