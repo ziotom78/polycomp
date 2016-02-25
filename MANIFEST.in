@@ -2,3 +2,6 @@ include README.rst
 include LICENSE
 include example.conf
 include pypolycomp/_bindings.c
+include pypolycomp/_bindings.pyx
+include pypolycomp/cpolycomp.pxd
+
