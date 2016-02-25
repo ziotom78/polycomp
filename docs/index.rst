@@ -14,6 +14,8 @@ Contents:
    how-to-get-it
    intro
    configuration-files
+   optimization
+   file-format
 
 Indices and tables
 ==================

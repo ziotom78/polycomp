@@ -1,4 +1,3 @@
-========
 Polycomp
 ========
 
@@ -32,9 +31,9 @@ Basic usage
 To use the bindings in your code, simply import ``pypolycomp`` in your
 project::
 
-  import pypolycomp
+    import pypolycomp
 
 This package provides also a standalone program, ``polycomp``. Use the
 ``--help`` flag to get some help about how to use it::
 
-  $ polycomp --help
+    $ polycomp --help
