@@ -1,10 +1,10 @@
 Polycomp
 ========
 
-This package provides a set of Python bindings to the libpolycomp
-library, as well as a stand-alone program which can be used to
-compress/decompress FITS files into polycomp files (still FITS files
-in disguise).
+This package provides a set of Python bindings to the libpolycomp library
+(https://github.com/ziotom78/libpolycomp), as well as a stand-alone program
+which can be used to compress/decompress FITS files into polycomp files (still
+FITS files in disguise).
 
 Requirements
 ------------
