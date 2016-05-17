@@ -461,7 +461,8 @@ def compress_and_encode_poly(parser, table, samples_format, samples, debug):
     exhaustive_search = parser.has_option(table, 'no_smart_optimization') and \
                         parser.getboolean(table, 'no_smart_optimization')
 
-    if exhaustive_search:
+    if exhaustive_search or (len(num_of_coefficients_space) == 1 and
+                             len(samples_per_chunk_space) == 1):
         # Scan the whole grid of parameters
         best_parameter_point, parameter_space = \
             parameter_space_survey(samples, num_of_coefficients_space,
