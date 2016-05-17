@@ -6,6 +6,14 @@ This package provides a set of Python bindings to the libpolycomp library
 which can be used to compress/decompress FITS files into polycomp files (still
 FITS files in disguise).
 
+This code has been indexed in the `Astrophysics Source Code Library
+<http://ascl.net>`_ as `[ascl:1604.002] <http://ascl.net/1604.002>`_.
+
+The paper *Polycomp: efficient and configurable compression of
+astronomical timelines* has been accepted by the Journal "Astronomy &
+Computing" (http://dx.doi.org/10.1016/j.ascom.2016.04.004). The
+preprint is available on `arXiv <http://arxiv.org/abs/1604.07980v1>`_.
+
 Requirements
 ------------
 
