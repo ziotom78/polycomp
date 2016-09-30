@@ -5,6 +5,7 @@ from setuptools import setup, find_packages
 from setuptools.extension import Extension
 import os.path as path
 from distutils.version import LooseVersion as Version
+import numpy as np
 
 here = path.abspath(path.dirname(__file__))
 
@@ -51,6 +52,7 @@ setup(name="polycomp",
       license="MIT",
       url="https://github.com/ziotom78/polycomp",
       install_requires=["cython >= 0.18", "numpy >= 1.8.2", "astropy >= 0.4", "click"],
+      include_dirs=[np.get_include()],
       ext_modules=modules,
       scripts=['polycomp.py'],
       packages=['pypolycomp'],
