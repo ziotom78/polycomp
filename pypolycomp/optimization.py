@@ -16,15 +16,24 @@ ParameterPoint = namedtuple('ParameterPoint',
                              'cr',
                              'elapsed_time'])
 
-ParameterSpaceMesh = namedtuple('ParameterSpaceMesh',
-                                ['samples_per_chunk',
-                                 'num_of_poly_coeffs',
-                                 'compr_data_size',
-                                 'num_of_chunks',
-                                 'num_of_compr_chunks',
-                                 'num_of_cheby_coeffs',
-                                 'cr',
-                                 'elapsed_time'])
+class ParameterSpaceMesh:
+    def __init__(self,
+                 samples_per_chunk,
+                 num_of_poly_coeffs,
+                 compr_data_size,
+                 num_of_chunks,
+                 num_of_compr_chunks,
+                 num_of_cheby_coeffs,
+                 cr,
+                 elapsed_time):
+        self.samples_per_chunk = samples_per_chunk
+        self.num_of_poly_coeffs = num_of_poly_coeffs
+        self.compr_data_size = compr_data_size
+        self.num_of_chunks = num_of_chunks
+        self.num_of_compr_chunks = num_of_compr_chunks
+        self.num_of_cheby_coeffs = num_of_cheby_coeffs
+        self.cr = cr
+        self.elapsed_time = elapsed_time
 
 ################################################################################
 
@@ -85,7 +94,7 @@ def get_param_space_mesh(parameter_point_list):
                       'num_of_cheby_coeffs',
                       'cr',
                       'elapsed_time'):
-            mesh.__dict__[param][idx_y, idx_x] = cur_point.__dict__[param]
+            mesh.__dict__[param][idx_y, idx_x] = getattr(cur_point, param)
 
     return mesh
 
