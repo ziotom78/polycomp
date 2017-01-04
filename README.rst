@@ -1,7 +1,9 @@
 Polycomp
 ========
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+.. image:: https://img.shields.io/badge/License-MIT-yellow.svg
+    :target: https://opensource.org/licenses/MIT
+    :alt: License: MIT
 
 This package provides a set of Python bindings to the libpolycomp library
 (https://github.com/ziotom78/libpolycomp), as well as a stand-alone program
