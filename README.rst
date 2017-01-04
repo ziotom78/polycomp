@@ -1,6 +1,8 @@
 Polycomp
 ========
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 This package provides a set of Python bindings to the libpolycomp library
 (https://github.com/ziotom78/libpolycomp), as well as a stand-alone program
 which can be used to compress/decompress FITS files into polycomp files (still
@@ -45,3 +47,27 @@ This package provides also a standalone program, ``polycomp``. Use the
 ``--help`` flag to get some help about how to use it::
 
     $ polycomp --help
+
+How to cite this library
+------------------------
+
+If you use this library in your work, please cite the paper `Polycomp:
+efficient and configurable compression of astronomical timelines`
+(http://dx.doi.org/10.1016/j.ascom.2016.04.004)::
+
+        @article{Tomasi201688,
+                title = "Polycomp: Efficient and configurable compression of astronomical timelines",
+                journal = "Astronomy and Computing",
+                volume = "16",
+                number = "",
+                pages = "88-98",
+                year = "2016",
+                issn = "2213-1337",
+                doi = "http://dx.doi.org/10.1016/j.ascom.2016.04.004",
+                author = "M. Tomasi",
+        }
+
+License
+-------
+
+This code is released under the MIT license.
