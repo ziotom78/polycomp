@@ -27,6 +27,7 @@ Requirements
    be installed
 
 3. The following Python libraries are required:
+
    - `click` (http://click.pocoo.org/5/);
    - `numpy` (http://www.numpy.org/);
    - Either `astropy` (version 0.4 or greater, http://www.astropy.org/) or
