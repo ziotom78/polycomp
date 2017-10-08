@@ -32,11 +32,12 @@ Requirements
    - `numpy` (http://www.numpy.org/);
    - Either `astropy` (version 0.4 or greater, http://www.astropy.org/) or
      `pyfits` (http://www.stsci.edu/institute/software_hardware/pyfits). (The
-     `setup.py` script installs Astropy.)
+     `setup.py` script installs Astropy.);
+   - Cython (http://cython.org/).  
 
 **Note**: Recent versions of NumPy (1.10) seem to be incompatible with PyFits
 3.3: saving files will lead to strange assertion errors. NumPy 1.8.2 and PyFits
-3.3 are fine.
+3.3 are fine. Or better, install AstroPy.
 
 Basic usage
 -----------
