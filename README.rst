@@ -39,6 +39,23 @@ Requirements
 3.3: saving files will lead to strange assertion errors. NumPy 1.8.2 and PyFits
 3.3 are fine. Or better, install AstroPy.
 
+
+Installation
+------------
+
+Once you have installed all the requirements, run the following command to install
+the library::
+
+    pip install .
+    
+You might have to make Python aware of the directory where `libpolycomp.so` was
+installed, if this is a non-standard location (this might include `/usr/local/lib`,
+which is the default path used by Libpolycomp when running `make install`).
+Just set the `LD_LIBRARY_PATH` variable to the correct path::
+
+    export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+
+
 Basic usage
 -----------
 
